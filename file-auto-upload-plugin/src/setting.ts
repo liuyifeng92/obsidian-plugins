@@ -18,6 +18,7 @@ export interface PluginSettings {
   autoCleanupRoot: boolean;
   imageDesc: "origin" | "none" | "removeDefault";
   remoteServerMode: boolean;
+  autoUpdate: boolean;
   [propName: string]: any;
 }
 
@@ -36,10 +37,16 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   autoCleanupRoot: true,
   imageDesc: "origin",
   remoteServerMode: false,
+  autoUpdate: true,
 };
 
 export class SettingTab extends PluginSettingTab {
   plugin: imageAutoUploadPlugin;
+  private isCheckingUpdate = false;
+  private isUpdating = false;
+  private updateProgress = 0;
+  private updateResultMessage = "";
+  private latestVersion = "";
 
   constructor(app: App, plugin: imageAutoUploadPlugin) {
     super(app, plugin);
@@ -262,6 +269,93 @@ export class SettingTab extends PluginSettingTab {
           .setValue(this.plugin.settings.autoCleanupRoot)
           .onChange(async value => {
             this.plugin.settings.autoCleanupRoot = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    this.renderVersionUpdateSection(containerEl);
+  }
+
+  private renderVersionUpdateSection(containerEl: HTMLElement) {
+    containerEl.createEl("h2", { text: "版本更新" });
+    containerEl.createEl("h3", { text: "file-auto-upload-plugin" });
+    containerEl.createDiv({
+      cls: "auto-frontmatter-about-version",
+      text: `当前版本：${this.plugin.manifest.version}`,
+    });
+
+    const actionEl = containerEl.createDiv({ cls: "auto-frontmatter-about-action" });
+    const checkButton = actionEl.createEl("button", {
+      cls: "mod-cta auto-frontmatter-about-check-btn",
+      text: this.isCheckingUpdate ? "检查中..." : "检查更新",
+    });
+    checkButton.disabled = this.isCheckingUpdate || this.isUpdating;
+    checkButton.onclick = async () => {
+      this.isCheckingUpdate = true;
+      this.updateResultMessage = "";
+      this.latestVersion = "";
+      this.display();
+
+      const result = await this.plugin.checkForUpdate();
+      this.isCheckingUpdate = false;
+
+      if (result.error === "not_found") {
+        new Notice("未找到远端仓库，请检查网络");
+        this.updateResultMessage = "未找到远端仓库，请检查网络";
+      } else if (result.error) {
+        new Notice(result.error);
+        this.updateResultMessage = result.error;
+      } else if (result.hasUpdate) {
+        this.latestVersion = result.version;
+        this.updateResultMessage = `🔄 发现新版本：${result.version}（当前 ${this.plugin.manifest.version}）`;
+      } else {
+        this.updateResultMessage = `✅ 当前已是最新版本（${this.plugin.manifest.version}）`;
+      }
+      this.display();
+    };
+
+    if (this.updateResultMessage) {
+      const resultEl = containerEl.createDiv({ cls: "auto-frontmatter-about-result" });
+      resultEl.createDiv({ text: this.updateResultMessage });
+
+      if (this.latestVersion) {
+        const updateButton = resultEl.createEl("button", {
+          cls: "mod-cta auto-frontmatter-about-update-btn",
+          text: this.isUpdating ? `更新中...（${this.updateProgress}/3）` : "立即更新",
+        });
+        updateButton.disabled = this.isUpdating;
+        updateButton.onclick = async () => {
+          this.isUpdating = true;
+          this.updateProgress = 0;
+          this.display();
+
+          try {
+            await this.plugin.performUpdate(this.latestVersion, (step, total) => {
+              this.updateProgress = step;
+              this.display();
+            });
+            this.isUpdating = false;
+            this.latestVersion = "";
+            this.updateResultMessage = "";
+          } catch (error) {
+            this.isUpdating = false;
+            new Notice(`更新失败：${error}`);
+            this.updateResultMessage = `更新失败：${error}`;
+          }
+          this.display();
+        };
+      }
+    }
+
+    containerEl.createEl("h3", { text: "自动更新", cls: "auto-frontmatter-about-config-title" });
+    new Setting(containerEl)
+      .setName("自动检查更新")
+      .setDesc("每 60 分钟自动检查并更新到最新版本。")
+      .addToggle(toggle =>
+        toggle
+          .setValue(this.plugin.settings.autoUpdate)
+          .onChange(async value => {
+            this.plugin.settings.autoUpdate = value;
             await this.plugin.saveSettings();
           })
       );
