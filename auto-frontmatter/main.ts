@@ -799,9 +799,14 @@ export default class AutoFrontmatterPlugin extends Plugin {
 
 		window.setTimeout(async () => {
 			try {
+				// unloadPlugin 会卸载并释放旧 JS
+				// loadPlugin 会重新从磁盘读取 main.js
 				// @ts-ignore — 内部 API
-				await app.plugins.disablePlugin(pluginId);
+				await app.plugins.unloadPlugin(pluginId);
 				await new Promise((resolve) => window.setTimeout(resolve, 500));
+				// @ts-ignore — 内部 API
+				await app.plugins.loadPlugin(pluginId);
+				// loadPlugin 只加载不启用，需要再 enable
 				// @ts-ignore — 内部 API
 				await app.plugins.enablePlugin(pluginId);
 				await new Promise((resolve) => window.setTimeout(resolve, 500));
