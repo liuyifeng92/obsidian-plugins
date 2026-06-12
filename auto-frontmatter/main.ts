@@ -27,6 +27,7 @@ interface AutoFrontmatterSettings {
 	emptyFieldHighlight: boolean;
 	folderDefaults: FolderDefaultRule[];
 	showFolderCheckmark: boolean;
+	githubToken: string;
 }
 
 interface SummaryService {
@@ -133,6 +134,7 @@ const DEFAULT_SETTINGS: AutoFrontmatterSettings = {
 	emptyFieldHighlight: true,
 	folderDefaults: [],
 	showFolderCheckmark: false,
+	githubToken: "",
 };
 
 const AUTHOR_OPTIONS = [
@@ -154,8 +156,9 @@ type HighlightField = (typeof HIGHLIGHT_FIELDS)[number];
 const FOLDER_DEFAULT_FIELDS = ["项目", "类型"] as const;
 type FolderDefaultField = (typeof FOLDER_DEFAULT_FIELDS)[number];
 type FolderDefaultValues = Partial<Record<FolderDefaultField, string>>;
-const SETTING_TABS = ["通用", "文件夹规则", "AI摘要", "扫描仓库", "设备绑定"] as const;
+const SETTING_TABS = ["通用", "文件夹规则", "AI摘要", "扫描仓库", "设备绑定", "关于"] as const;
 type SettingTabId = (typeof SETTING_TABS)[number];
+const GITHUB_REPO_API = "https://api.github.com/repos/liuyifeng92/obsidian-plugins/contents/auto-frontmatter";
 type AISummaryTaskType = "completion";
 const LEGACY_FIELD_RENAMES = {
 	created: "创建时间",
@@ -734,6 +737,100 @@ export default class AutoFrontmatterPlugin extends Plugin {
 		) {
 			this.settings.aiSummaryPrompt = DEFAULT_AI_SUMMARY_PROMPT;
 		}
+	}
+
+	async checkForUpdate(): Promise<{ hasUpdate: boolean; version: string; error?: string }> {
+		const token = this.settings.githubToken.trim();
+		if (!token) {
+			return { hasUpdate: false, version: "", error: "empty_token" };
+		}
+
+		try {
+			const response = await fetch(`${GITHUB_REPO_API}/manifest.json`, {
+				headers: {
+					Authorization: `token ${token}`,
+					Accept: "application/vnd.github.v3.raw",
+				},
+			});
+
+			if (response.status === 401) {
+				return { hasUpdate: false, version: "", error: "invalid_token" };
+			}
+			if (response.status === 404) {
+				return { hasUpdate: false, version: "", error: "not_found" };
+			}
+			if (!response.ok) {
+				return { hasUpdate: false, version: "", error: `请求失败：${response.status}` };
+			}
+
+			const remoteManifest = await response.json() as { version?: string };
+			const remoteVersion = remoteManifest.version ?? "";
+			if (!remoteVersion) {
+				return { hasUpdate: false, version: "", error: "远端版本号无效" };
+			}
+
+			const currentVersion = this.manifest.version;
+			const hasUpdate = this.compareVersions(remoteVersion, currentVersion) > 0;
+			return { hasUpdate, version: remoteVersion };
+		} catch (error) {
+			return { hasUpdate: false, version: "", error: getErrorMessage(error) };
+		}
+	}
+
+	async performUpdate(version: string, onProgress?: (step: number, total: number) => void): Promise<void> {
+		const token = this.settings.githubToken.trim();
+		const files = ["main.js", "manifest.json", "styles.css"] as const;
+		const contents: Record<string, string> = {};
+
+		for (let index = 0; index < files.length; index++) {
+			const file = files[index];
+			const response = await fetch(`${GITHUB_REPO_API}/${file}`, {
+				headers: {
+					Authorization: `token ${token}`,
+					Accept: "application/vnd.github.v3.raw",
+				},
+			});
+			if (!response.ok) {
+				throw new Error(`下载 ${file} 失败：${response.status}`);
+			}
+			contents[file] = await response.text();
+			onProgress?.(index + 1, files.length);
+		}
+
+		const pluginDir = this.manifest.dir;
+		if (!pluginDir) {
+			throw new Error("无法获取插件目录");
+		}
+
+		await this.app.vault.adapter.write(`${pluginDir}/main.js`, contents["main.js"]);
+		await this.app.vault.adapter.write(`${pluginDir}/manifest.json`, contents["manifest.json"]);
+		await this.app.vault.adapter.write(`${pluginDir}/styles.css`, contents["styles.css"]);
+
+		new Notice(`更新完成（${version}），请重启 Obsidian 生效`);
+	}
+
+	private compareVersions(v1: string, v2: string): number {
+		const parseVersion = (version: string): number[] => {
+			return version
+				.replace(/^v/, "")
+				.split(".")
+				.map((part) => {
+					const match = /^\d+/.exec(part);
+					return match ? parseInt(match[0], 10) : 0;
+				});
+		};
+
+		const parts1 = parseVersion(v1);
+		const parts2 = parseVersion(v2);
+		const maxLength = Math.max(parts1.length, parts2.length);
+
+		for (let index = 0; index < maxLength; index++) {
+			const a = parts1[index] ?? 0;
+			const b = parts2[index] ?? 0;
+			if (a > b) return 1;
+			if (a < b) return -1;
+		}
+		return 0;
 	}
 
 	private scheduleUpdatedFieldRefresh(file: TFile | null) {
@@ -1507,6 +1604,12 @@ class AutoFrontmatterSettingTab extends PluginSettingTab {
 	private isExecutingAISummaryCompletion = false;
 	private processedAISummaryCompletionCount = 0;
 	private currentRulePage = 0;
+	private isCheckingUpdate = false;
+	private isUpdating = false;
+	private updateProgress = 0;
+	private updateResultMessage = "";
+	private latestVersion = "";
+	private githubTokenVisible = false;
 
 	constructor(app: App, plugin: AutoFrontmatterPlugin) {
 		super(app, plugin);
@@ -1531,6 +1634,8 @@ class AutoFrontmatterSettingTab extends PluginSettingTab {
 			this.renderScanSection(contentEl);
 		} else if (this.activeTab === "设备绑定") {
 			this.renderDeviceBindings(contentEl);
+		} else if (this.activeTab === "关于") {
+			this.renderAboutSection(contentEl);
 		} else {
 			this.renderAISummarySettings(contentEl);
 		}
@@ -1932,6 +2037,110 @@ class AutoFrontmatterSettingTab extends PluginSettingTab {
 				authorEl.createSpan({ cls: "auto-frontmatter-device-local", text: "（本机）" });
 			}
 		}
+	}
+
+	private renderAboutSection(containerEl: HTMLElement) {
+		containerEl.createEl("h2", { text: "auto-frontmatter" });
+		containerEl.createDiv({
+			cls: "auto-frontmatter-about-version",
+			text: `当前版本：${this.plugin.manifest.version}`,
+		});
+
+		const actionEl = containerEl.createDiv({ cls: "auto-frontmatter-about-action" });
+		const checkButton = actionEl.createEl("button", {
+			cls: "mod-cta auto-frontmatter-about-check-btn",
+			text: this.isCheckingUpdate ? "检查中..." : "检查更新",
+		});
+		checkButton.disabled = this.isCheckingUpdate || this.isUpdating;
+		checkButton.onclick = async () => {
+			if (!this.plugin.settings.githubToken.trim()) {
+				new Notice("请先在关于页面配置 GitHub Token");
+				return;
+			}
+
+			this.isCheckingUpdate = true;
+			this.updateResultMessage = "";
+			this.latestVersion = "";
+			this.display();
+
+			const result = await this.plugin.checkForUpdate();
+			this.isCheckingUpdate = false;
+
+			if (result.error === "empty_token") {
+				new Notice("请先在关于页面配置 GitHub Token");
+			} else if (result.error === "invalid_token") {
+				new Notice("GitHub Token 无效，请检查配置");
+				this.updateResultMessage = "GitHub Token 无效，请检查配置";
+			} else if (result.error === "not_found") {
+				new Notice("未找到远端仓库，请检查网络");
+				this.updateResultMessage = "未找到远端仓库，请检查网络";
+			} else if (result.error) {
+				new Notice(result.error);
+				this.updateResultMessage = result.error;
+			} else if (result.hasUpdate) {
+				this.latestVersion = result.version;
+				this.updateResultMessage = `🔄 发现新版本：${result.version}（当前 ${this.plugin.manifest.version}）`;
+			} else {
+				this.updateResultMessage = `✅ 当前已是最新版本（${this.plugin.manifest.version}）`;
+			}
+			this.display();
+		};
+
+		if (this.updateResultMessage) {
+			const resultEl = containerEl.createDiv({ cls: "auto-frontmatter-about-result" });
+			resultEl.createDiv({ text: this.updateResultMessage });
+
+			if (this.latestVersion) {
+				const updateButton = resultEl.createEl("button", {
+					cls: "mod-cta auto-frontmatter-about-update-btn",
+					text: this.isUpdating ? `更新中...（${this.updateProgress}/3）` : "立即更新",
+				});
+				updateButton.disabled = this.isUpdating;
+				updateButton.onclick = async () => {
+					this.isUpdating = true;
+					this.updateProgress = 0;
+					this.display();
+
+					try {
+						await this.plugin.performUpdate(this.latestVersion, (step, total) => {
+							this.updateProgress = step;
+							this.display();
+						});
+						this.isUpdating = false;
+						this.latestVersion = "";
+						this.updateResultMessage = "";
+					} catch (error) {
+						this.isUpdating = false;
+						new Notice(`更新失败：${getErrorMessage(error)}`);
+						this.updateResultMessage = `更新失败：${getErrorMessage(error)}`;
+					}
+					this.display();
+				};
+			}
+		}
+
+		containerEl.createEl("h3", { text: "更新源配置", cls: "auto-frontmatter-about-config-title" });
+		const tokenSetting = new Setting(containerEl).setName("GitHub Token");
+		tokenSetting.controlEl.addClass("auto-frontmatter-github-token-control");
+		tokenSetting.addText((text) => {
+			text.setValue(this.plugin.settings.githubToken).onChange(async (value) => {
+				this.plugin.settings.githubToken = value;
+				await this.plugin.saveSettings();
+			});
+			text.inputEl.type = this.githubTokenVisible ? "text" : "password";
+			text.inputEl.placeholder = "sk-xxxxx";
+		});
+		tokenSetting.addButton((button) => {
+			button.setTooltip(this.githubTokenVisible ? "隐藏 Token" : "显示 Token").onClick(() => {
+				this.githubTokenVisible = !this.githubTokenVisible;
+				this.display();
+			});
+			setIcon(button.buttonEl, this.githubTokenVisible ? "eye-off" : "eye");
+		});
+		containerEl.createDiv({
+			cls: "auto-frontmatter-about-token-desc",
+			text: "在 GitHub Settings → Developer settings → Personal access tokens 中创建，需要 repo 权限。",
+		});
 	}
 
 	private getCurrentDeviceBinding(): DeviceAuthorBinding | undefined {
