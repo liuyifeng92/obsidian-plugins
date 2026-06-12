@@ -793,13 +793,12 @@ export default class AutoFrontmatterPlugin extends Plugin {
 		await this.app.vault.adapter.write(`${pluginDir}/manifest.json`, contents["manifest.json"]);
 		await this.app.vault.adapter.write(`${pluginDir}/styles.css`, contents["styles.css"]);
 
-		const pluginId = this.manifest.id;
-		// @ts-ignore — 内部 API
-		await this.app.plugins.disablePlugin(pluginId);
-		// @ts-ignore — 内部 API
-		await this.app.plugins.enablePlugin(pluginId);
+		new Notice(`更新完成（${version}），正在重载...`);
 
-		new Notice(`更新完成，插件已自动重载（${version}）`);
+		window.setTimeout(() => {
+			// @ts-ignore — 内部 API
+			this.app.commands.executeCommandById("app:reload");
+		}, 1000);
 	}
 
 	private compareVersions(v1: string, v2: string): number {
