@@ -1,0 +1,11 @@
+{
+  "id": "file-auto-upload-plugin",
+  "name": "【FutureLAB】File Auto Upload",
+  "version": "4.1.0",
+  "minAppVersion": "0.10.7",
+  "description": "通过 PicGo 自动上传剪贴板、拖拽和根目录中的图片及音视频文件，并替换笔记中的本地引用。",
+  "author": "renmu",
+  "authorUrl": "https://github.com/renmu123/obsidian-image-auto-upload-plugin",
+  "isDesktopOnly": true,
+  "fundingUrl": "https://afdian.com/a/renmu123"
+}
