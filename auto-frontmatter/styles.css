@@ -962,28 +962,3 @@
 	padding: 12px 16px;
 }
 
-.auto-frontmatter-about-config-title {
-	border-top: 1px solid var(--background-modifier-border);
-	margin-top: 20px;
-	padding-top: 16px;
-}
-
-.auto-frontmatter-github-token-control {
-	align-items: center;
-	display: flex;
-	gap: 8px;
-}
-
-.auto-frontmatter-github-token-control input[type="password"],
-.auto-frontmatter-github-token-control input[type="text"] {
-	flex: 1;
-	font-family: var(--font-monospace);
-}
-
-.auto-frontmatter-about-token-desc {
-	color: var(--text-muted);
-	font-size: 12px;
-	line-height: 1.5;
-	margin-top: -8px;
-	margin-bottom: 16px;
-}

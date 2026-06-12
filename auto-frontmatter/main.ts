@@ -27,7 +27,6 @@ interface AutoFrontmatterSettings {
 	emptyFieldHighlight: boolean;
 	folderDefaults: FolderDefaultRule[];
 	showFolderCheckmark: boolean;
-	githubToken: string;
 }
 
 interface SummaryService {
@@ -134,7 +133,6 @@ const DEFAULT_SETTINGS: AutoFrontmatterSettings = {
 	emptyFieldHighlight: true,
 	folderDefaults: [],
 	showFolderCheckmark: false,
-	githubToken: "",
 };
 
 const AUTHOR_OPTIONS = [
@@ -156,7 +154,7 @@ type HighlightField = (typeof HIGHLIGHT_FIELDS)[number];
 const FOLDER_DEFAULT_FIELDS = ["项目", "类型"] as const;
 type FolderDefaultField = (typeof FOLDER_DEFAULT_FIELDS)[number];
 type FolderDefaultValues = Partial<Record<FolderDefaultField, string>>;
-const SETTING_TABS = ["通用", "文件夹规则", "AI摘要", "扫描仓库", "设备绑定", "关于"] as const;
+const SETTING_TABS = ["通用", "文件夹规则", "AI摘要", "扫描仓库", "设备绑定", "版本更新"] as const;
 type SettingTabId = (typeof SETTING_TABS)[number];
 const GITHUB_REPO_API = "https://api.github.com/repos/liuyifeng92/obsidian-plugins/contents/auto-frontmatter";
 type AISummaryTaskType = "completion";
@@ -740,22 +738,13 @@ export default class AutoFrontmatterPlugin extends Plugin {
 	}
 
 	async checkForUpdate(): Promise<{ hasUpdate: boolean; version: string; error?: string }> {
-		const token = this.settings.githubToken.trim();
-		if (!token) {
-			return { hasUpdate: false, version: "", error: "empty_token" };
-		}
-
 		try {
 			const response = await fetch(`${GITHUB_REPO_API}/manifest.json`, {
 				headers: {
-					Authorization: `token ${token}`,
 					Accept: "application/vnd.github.v3.raw",
 				},
 			});
 
-			if (response.status === 401) {
-				return { hasUpdate: false, version: "", error: "invalid_token" };
-			}
 			if (response.status === 404) {
 				return { hasUpdate: false, version: "", error: "not_found" };
 			}
@@ -778,7 +767,6 @@ export default class AutoFrontmatterPlugin extends Plugin {
 	}
 
 	async performUpdate(version: string, onProgress?: (step: number, total: number) => void): Promise<void> {
-		const token = this.settings.githubToken.trim();
 		const files = ["main.js", "manifest.json", "styles.css"] as const;
 		const contents: Record<string, string> = {};
 
@@ -786,7 +774,6 @@ export default class AutoFrontmatterPlugin extends Plugin {
 			const file = files[index];
 			const response = await fetch(`${GITHUB_REPO_API}/${file}`, {
 				headers: {
-					Authorization: `token ${token}`,
 					Accept: "application/vnd.github.v3.raw",
 				},
 			});
@@ -1609,7 +1596,6 @@ class AutoFrontmatterSettingTab extends PluginSettingTab {
 	private updateProgress = 0;
 	private updateResultMessage = "";
 	private latestVersion = "";
-	private githubTokenVisible = false;
 
 	constructor(app: App, plugin: AutoFrontmatterPlugin) {
 		super(app, plugin);
@@ -1634,7 +1620,7 @@ class AutoFrontmatterSettingTab extends PluginSettingTab {
 			this.renderScanSection(contentEl);
 		} else if (this.activeTab === "设备绑定") {
 			this.renderDeviceBindings(contentEl);
-		} else if (this.activeTab === "关于") {
+		} else if (this.activeTab === "版本更新") {
 			this.renderAboutSection(contentEl);
 		} else {
 			this.renderAISummarySettings(contentEl);
@@ -2053,11 +2039,6 @@ class AutoFrontmatterSettingTab extends PluginSettingTab {
 		});
 		checkButton.disabled = this.isCheckingUpdate || this.isUpdating;
 		checkButton.onclick = async () => {
-			if (!this.plugin.settings.githubToken.trim()) {
-				new Notice("请先在关于页面配置 GitHub Token");
-				return;
-			}
-
 			this.isCheckingUpdate = true;
 			this.updateResultMessage = "";
 			this.latestVersion = "";
@@ -2066,12 +2047,7 @@ class AutoFrontmatterSettingTab extends PluginSettingTab {
 			const result = await this.plugin.checkForUpdate();
 			this.isCheckingUpdate = false;
 
-			if (result.error === "empty_token") {
-				new Notice("请先在关于页面配置 GitHub Token");
-			} else if (result.error === "invalid_token") {
-				new Notice("GitHub Token 无效，请检查配置");
-				this.updateResultMessage = "GitHub Token 无效，请检查配置";
-			} else if (result.error === "not_found") {
+			if (result.error === "not_found") {
 				new Notice("未找到远端仓库，请检查网络");
 				this.updateResultMessage = "未找到远端仓库，请检查网络";
 			} else if (result.error) {
@@ -2118,29 +2094,6 @@ class AutoFrontmatterSettingTab extends PluginSettingTab {
 				};
 			}
 		}
-
-		containerEl.createEl("h3", { text: "更新源配置", cls: "auto-frontmatter-about-config-title" });
-		const tokenSetting = new Setting(containerEl).setName("GitHub Token");
-		tokenSetting.controlEl.addClass("auto-frontmatter-github-token-control");
-		tokenSetting.addText((text) => {
-			text.setValue(this.plugin.settings.githubToken).onChange(async (value) => {
-				this.plugin.settings.githubToken = value;
-				await this.plugin.saveSettings();
-			});
-			text.inputEl.type = this.githubTokenVisible ? "text" : "password";
-			text.inputEl.placeholder = "sk-xxxxx";
-		});
-		tokenSetting.addButton((button) => {
-			button.setTooltip(this.githubTokenVisible ? "隐藏 Token" : "显示 Token").onClick(() => {
-				this.githubTokenVisible = !this.githubTokenVisible;
-				this.display();
-			});
-			setIcon(button.buttonEl, this.githubTokenVisible ? "eye-off" : "eye");
-		});
-		containerEl.createDiv({
-			cls: "auto-frontmatter-about-token-desc",
-			text: "在 GitHub Settings → Developer settings → Personal access tokens 中创建，需要 repo 权限。",
-		});
 	}
 
 	private getCurrentDeviceBinding(): DeviceAuthorBinding | undefined {
