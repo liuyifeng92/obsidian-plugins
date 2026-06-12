@@ -793,12 +793,29 @@ export default class AutoFrontmatterPlugin extends Plugin {
 		await this.app.vault.adapter.write(`${pluginDir}/manifest.json`, contents["manifest.json"]);
 		await this.app.vault.adapter.write(`${pluginDir}/styles.css`, contents["styles.css"]);
 
-		new Notice(`更新完成（${version}），正在重载...`);
+		const pluginId = this.manifest.id;
+		new Notice(`更新完成（${version}），正在重载插件...`);
 
-		window.setTimeout(() => {
-			// @ts-ignore — 内部 API
-			this.app.commands.executeCommandById("app:reload");
-		}, 1000);
+		window.setTimeout(async () => {
+			try {
+				// @ts-ignore — 内部 API
+				await this.app.plugins.disablePlugin(pluginId);
+				// @ts-ignore — 内部 API
+				await this.app.plugins.enablePlugin(pluginId);
+
+				// 重新打开插件设置页
+				// @ts-ignore — 内部 API
+				const setting = this.app.setting;
+				if (setting && setting.activeTab?.id === pluginId) {
+					setting.open();
+					setting.openTabById(pluginId);
+				}
+
+				new Notice(`插件已重载到 ${version}`);
+			} catch (e) {
+				new Notice("自动重载失败，请手动重启 Obsidian");
+			}
+		}, 500);
 	}
 
 	private compareVersions(v1: string, v2: string): number {
