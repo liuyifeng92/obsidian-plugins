@@ -1,6 +1,6 @@
 {
 	"name": "auto-frontmatter",
-	"version": "1.2.0",
+	"version": "1.2.1",
 	"description": "Obsidian plugin that inserts frontmatter for new Markdown files and maintains updated timestamps.",
 	"main": "main.js",
 	"scripts": {
