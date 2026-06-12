@@ -156,7 +156,7 @@ type FolderDefaultField = (typeof FOLDER_DEFAULT_FIELDS)[number];
 type FolderDefaultValues = Partial<Record<FolderDefaultField, string>>;
 const SETTING_TABS = ["通用", "文件夹规则", "AI摘要", "扫描仓库", "设备绑定", "版本更新"] as const;
 type SettingTabId = (typeof SETTING_TABS)[number];
-const GITHUB_REPO_API = "https://api.github.com/repos/liuyifeng92/obsidian-plugins/contents/auto-frontmatter";
+const GITHUB_RAW_BASE = "https://raw.githubusercontent.com/liuyifeng92/obsidian-plugins/main/auto-frontmatter";
 type AISummaryTaskType = "completion";
 const LEGACY_FIELD_RENAMES = {
 	created: "创建时间",
@@ -739,11 +739,7 @@ export default class AutoFrontmatterPlugin extends Plugin {
 
 	async checkForUpdate(): Promise<{ hasUpdate: boolean; version: string; error?: string }> {
 		try {
-			const response = await fetch(`${GITHUB_REPO_API}/manifest.json`, {
-				headers: {
-					Accept: "application/vnd.github.v3.raw",
-				},
-			});
+			const response = await fetch(`${GITHUB_RAW_BASE}/manifest.json`);
 
 			if (response.status === 404) {
 				return { hasUpdate: false, version: "", error: "not_found" };
@@ -772,11 +768,7 @@ export default class AutoFrontmatterPlugin extends Plugin {
 
 		for (let index = 0; index < files.length; index++) {
 			const file = files[index];
-			const response = await fetch(`${GITHUB_REPO_API}/${file}`, {
-				headers: {
-					Accept: "application/vnd.github.v3.raw",
-				},
-			});
+			const response = await fetch(`${GITHUB_RAW_BASE}/${file}`);
 			if (!response.ok) {
 				throw new Error(`下载 ${file} 失败：${response.status}`);
 			}
