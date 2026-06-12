@@ -1,7 +1,7 @@
 {
 	"id": "auto-frontmatter",
 	"name": "【FutureLAB】Auto Frontmatter",
-	"version": "1.2.1",
+	"version": "1.2.3",
 	"minAppVersion": "1.0.0",
 	"description": "为新建 Markdown 文件自动插入属性，并自动维护更新时间。",
 	"author": "刘一锋",

@@ -791,22 +791,39 @@ export default class AutoFrontmatterPlugin extends Plugin {
 
 		window.setTimeout(async () => {
 			try {
-				// unloadPlugin 会卸载并释放旧 JS
-				// loadPlugin 会重新从磁盘读取 main.js
+				// 1. 卸载插件
 				// @ts-ignore — 内部 API
 				await app.plugins.unloadPlugin(pluginId);
-				await new Promise((resolve) => window.setTimeout(resolve, 500));
+
+				// 2. 清除内存中的旧 manifest 缓存
+				// @ts-ignore — 内部 API
+				delete app.plugins.manifests[pluginId];
+
+				await new Promise((resolve) => window.setTimeout(resolve, 300));
+
+				// 3. 重新读取磁盘上的 manifest
+				// @ts-ignore — 内部 API
+				await app.plugins.loadManifests();
+
+				await new Promise((resolve) => window.setTimeout(resolve, 300));
+
+				// 4. 重新加载并启用插件
 				// @ts-ignore — 内部 API
 				await app.plugins.loadPlugin(pluginId);
-				// loadPlugin 只加载不启用，需要再 enable
 				// @ts-ignore — 内部 API
 				await app.plugins.enablePlugin(pluginId);
+
 				await new Promise((resolve) => window.setTimeout(resolve, 500));
+
+				// 5. 打开设置页
 				// @ts-ignore — 内部 API
 				app.setting.open();
 				// @ts-ignore — 内部 API
 				app.setting.openTabById(pluginId);
+
+				new Notice(`插件已重载到 ${version}`);
 			} catch (e) {
+				console.error("[auto-frontmatter] 重载失败:", e);
 				new Notice("自动重载失败，请点击已安装插件页的「重新加载插件」按钮");
 			}
 		}, 100);
