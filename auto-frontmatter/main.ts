@@ -27,6 +27,7 @@ interface AutoFrontmatterSettings {
 	emptyFieldHighlight: boolean;
 	folderDefaults: FolderDefaultRule[];
 	showFolderCheckmark: boolean;
+	autoUpdate: boolean;
 }
 
 interface SummaryService {
@@ -133,6 +134,7 @@ const DEFAULT_SETTINGS: AutoFrontmatterSettings = {
 	emptyFieldHighlight: true,
 	folderDefaults: [],
 	showFolderCheckmark: false,
+	autoUpdate: true,
 };
 
 const AUTHOR_OPTIONS = [
@@ -179,6 +181,9 @@ export default class AutoFrontmatterPlugin extends Plugin {
 	private aiSummaryAbortController: AbortController | null = null;
 	private aiSummaryCompletionRunning = false;
 	private lastAISummaryScheduleSlot = "";
+	private autoUpdateCheckTimer: number | null = null;
+	private pendingAutoReloadTimer: number | null = null;
+	private pendingAutoReloadVersion = "";
 
 	async onload() {
 		await this.loadSettings();
@@ -232,6 +237,7 @@ export default class AutoFrontmatterPlugin extends Plugin {
 		this.scheduleEmptyFieldHighlightCheck();
 		this.scheduleAISummaryButtonRefresh();
 		this.scheduleFolderCheckmarkRefresh();
+		this.scheduleAutoUpdateCheck();
 	}
 
 	onunload() {
@@ -247,6 +253,8 @@ export default class AutoFrontmatterPlugin extends Plugin {
 			window.clearTimeout(timer);
 		}
 		this.createTimers.clear();
+		this.clearAutoUpdateCheckTimer();
+		this.clearPendingAutoReloadTimer();
 	}
 
 	async loadSettings() {
@@ -763,6 +771,14 @@ export default class AutoFrontmatterPlugin extends Plugin {
 	}
 
 	async performUpdate(version: string, onProgress?: (step: number, total: number) => void): Promise<void> {
+		await this.downloadAndWriteUpdateFiles(version, onProgress);
+		await this.reloadPlugin(version, false);
+	}
+
+	private async downloadAndWriteUpdateFiles(
+		version: string,
+		onProgress?: (step: number, total: number) => void,
+	): Promise<void> {
 		const files = ["main.js", "manifest.json", "styles.css"] as const;
 		const contents: Record<string, string> = {};
 
@@ -784,10 +800,23 @@ export default class AutoFrontmatterPlugin extends Plugin {
 		await this.app.vault.adapter.write(`${pluginDir}/main.js`, contents["main.js"]);
 		await this.app.vault.adapter.write(`${pluginDir}/manifest.json`, contents["manifest.json"]);
 		await this.app.vault.adapter.write(`${pluginDir}/styles.css`, contents["styles.css"]);
+	}
 
+	private async reloadPlugin(version: string, auto = false): Promise<void> {
 		const pluginId = this.manifest.id;
 		const app = this.app;
-		new Notice(`更新完成（${version}），正在重载插件...`);
+
+		if (auto) {
+			// @ts-ignore — 内部 API
+			const setting = app.setting;
+			if (setting && setting.activeTab?.id === pluginId) {
+				this.pendingAutoReloadVersion = version;
+				this.watchPendingAutoReload();
+				return;
+			}
+		}
+
+		new Notice(auto ? `发现新版本（${version}），正在自动更新...` : `更新完成（${version}），正在重载插件...`);
 
 		window.setTimeout(async () => {
 			try {
@@ -821,12 +850,76 @@ export default class AutoFrontmatterPlugin extends Plugin {
 				// @ts-ignore — 内部 API
 				app.setting.openTabById(pluginId);
 
-				new Notice(`插件已重载到 ${version}`);
+				new Notice(auto ? `插件已自动更新到 ${version}` : `插件已重载到 ${version}`);
 			} catch (e) {
 				console.error("[auto-frontmatter] 重载失败:", e);
 				new Notice("自动重载失败，请点击已安装插件页的「重新加载插件」按钮");
 			}
 		}, 100);
+	}
+
+	private watchPendingAutoReload() {
+		this.clearPendingAutoReloadTimer();
+		this.pendingAutoReloadTimer = window.setInterval(() => {
+			const pluginId = this.manifest.id;
+			// @ts-ignore — 内部 API
+			const setting = this.app.setting;
+			if (!setting || setting.activeTab?.id !== pluginId) {
+				this.clearPendingAutoReloadTimer();
+				const version = this.pendingAutoReloadVersion;
+				this.pendingAutoReloadVersion = "";
+				if (version) {
+					void this.reloadPlugin(version, true);
+				}
+			}
+		}, 1000);
+	}
+
+	private clearAutoUpdateCheckTimer() {
+		if (this.autoUpdateCheckTimer !== null) {
+			window.clearTimeout(this.autoUpdateCheckTimer);
+			this.autoUpdateCheckTimer = null;
+		}
+	}
+
+	private clearPendingAutoReloadTimer() {
+		if (this.pendingAutoReloadTimer !== null) {
+			window.clearInterval(this.pendingAutoReloadTimer);
+			this.pendingAutoReloadTimer = null;
+		}
+	}
+
+	private scheduleAutoUpdateCheck() {
+		this.clearAutoUpdateCheckTimer();
+		this.autoUpdateCheckTimer = window.setTimeout(() => {
+			void this.runAutoUpdateCheck();
+			this.registerInterval(window.setInterval(() => {
+				void this.runAutoUpdateCheck();
+			}, 60 * 60 * 1000));
+		}, 30 * 1000);
+	}
+
+	private async runAutoUpdateCheck() {
+		if (!this.settings.autoUpdate) {
+			return;
+		}
+
+		const result = await this.checkForUpdate();
+		if (result.error || !result.hasUpdate) {
+			return;
+		}
+
+		void this.performAutoUpdate(result.version);
+	}
+
+	private async performAutoUpdate(version: string): Promise<void> {
+		try {
+			new Notice(`发现新版本 ${version}，正在自动更新...`);
+			await this.downloadAndWriteUpdateFiles(version);
+			await this.reloadPlugin(version, true);
+		} catch (error) {
+			console.error("[auto-frontmatter] 自动更新失败:", error);
+		}
 	}
 
 	private compareVersions(v1: string, v2: string): number {
@@ -2127,6 +2220,17 @@ class AutoFrontmatterSettingTab extends PluginSettingTab {
 				};
 			}
 		}
+
+		containerEl.createEl("h3", { text: "自动更新", cls: "auto-frontmatter-about-config-title" });
+		new Setting(containerEl)
+			.setName("自动检查更新")
+			.setDesc("每 60 分钟自动检查并更新到最新版本。")
+			.addToggle((toggle) =>
+				toggle.setValue(this.plugin.settings.autoUpdate).onChange(async (value) => {
+					this.plugin.settings.autoUpdate = value;
+					await this.plugin.saveSettings();
+				}),
+			);
 	}
 
 	private getCurrentDeviceBinding(): DeviceAuthorBinding | undefined {
