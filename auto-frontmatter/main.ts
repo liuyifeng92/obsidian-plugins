@@ -793,7 +793,13 @@ export default class AutoFrontmatterPlugin extends Plugin {
 		await this.app.vault.adapter.write(`${pluginDir}/manifest.json`, contents["manifest.json"]);
 		await this.app.vault.adapter.write(`${pluginDir}/styles.css`, contents["styles.css"]);
 
-		new Notice(`更新完成（${version}），请重启 Obsidian 生效`);
+		const pluginId = this.manifest.id;
+		// @ts-ignore — 内部 API
+		await this.app.plugins.disablePlugin(pluginId);
+		// @ts-ignore — 内部 API
+		await this.app.plugins.enablePlugin(pluginId);
+
+		new Notice(`更新完成，插件已自动重载（${version}）`);
 	}
 
 	private compareVersions(v1: string, v2: string): number {
