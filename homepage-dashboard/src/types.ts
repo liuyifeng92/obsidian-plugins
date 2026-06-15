@@ -42,6 +42,7 @@ export interface HomeDashboardSettings {
 	defaultLayout: DashboardLayout;
 	dashboardCombinations: DashboardCombination[];
 	autoUpdate: boolean;
+	heatmapColor: string;
 }
 
 export interface HomeDashboardPluginLike {

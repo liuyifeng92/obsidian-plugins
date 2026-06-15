@@ -1,4 +1,4 @@
-import { App, setIcon } from "obsidian";
+import { App, setIcon, setTooltip } from "obsidian";
 import { AggregatedResult, NoteEntry } from "../types";
 import { appendTag, formatDate, getFieldValue, loadSummary } from "./dashboard-helpers";
 
@@ -29,13 +29,13 @@ function mergeSmallEntries(entries: DistributionEntry[], threshold: number, othe
 	return [...big, other].sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
 }
 
-// 字段分布统一使用同一红色的透明度梯度：排名越高，红色越实；排名越低，越浅
+// 字段分布统一使用同一红色的透明度梯度：第 1 名 100%，之后每 2 名降一档
 const BASE_RED = "242, 48, 48";
-const RANK_RED_OPACITIES = [1, 0.8, 0.6, 0.4, 0.2];
+const RANK_RED_OPACITIES = [1, 0.8, 0.8, 0.6, 0.6, 0.4, 0.4, 0.2, 0.2];
 
 function getRankColor(index: number): string {
 	const opacity = RANK_RED_OPACITIES[index];
-	return opacity === undefined ? "#000000" : `rgba(${BASE_RED}, ${opacity})`;
+	return opacity === undefined ? "var(--kd-ink)" : `rgba(${BASE_RED}, ${opacity})`;
 }
 
 // 累计沉淀类型（矩形树图）层级较多，使用 10% 为档位、最低 10% 的透明度梯度
@@ -65,28 +65,29 @@ export function renderFieldDistribution(
 	const weeklyPanel = createPanel(wrapper, "本周沉淀");
 	weeklyPanel.addClass("kd-field-panel--weekly");
 	const weeklyColumns = weeklyPanel.createDiv("kd-field-panel-columns");
-	renderLollipopChart(
-		createColumn(weeklyColumns, "能力者"),
-		authorStats.filter((s) => s.weeklyNew > 0).map((s) => ({ key: s.key, count: s.weeklyNew, items: s.weeklyItems })),
-		app,
-		openNote
-	);
-	renderMiniStatCards(
-		createColumn(weeklyColumns, "项目"),
-		projectStats.filter((s) => s.weeklyNew > 0).map((s) => ({ key: s.key, count: s.weeklyNew, items: s.weeklyItems })),
-		app,
-		openNote
-	);
-	renderStackedRatioBar(
-		createColumn(weeklyColumns, "类型"),
-		mergeSmallEntries(
-			typeStats.filter((s) => s.weeklyNew > 0).map((s) => ({ key: s.key, count: s.weeklyNew, items: s.weeklyItems })),
-			10,
-			"其他"
-		),
-		app,
-		openNote
-	);
+
+	const weeklyProjects = projectStats.filter((s) => s.weeklyNew > 0).map((s) => ({ key: s.key, count: s.weeklyNew, items: s.weeklyItems }));
+	const weeklyTypesRaw = typeStats.filter((s) => s.weeklyNew > 0).map((s) => ({ key: s.key, count: s.weeklyNew, items: s.weeklyItems }));
+	const weeklyTypes = mergeSmallEntries(weeklyTypesRaw, 10, "其他");
+	const weeklyAuthors = authorStats.filter((s) => s.weeklyNew > 0).map((s) => ({ key: s.key, count: s.weeklyNew, items: s.weeklyItems }));
+
+	if (weeklyProjects.length === 0) {
+		createColumn(weeklyColumns, "项目").createDiv("kd-field-empty").setText("让项目更强");
+	} else {
+		renderMiniStatCards(createColumn(weeklyColumns, "项目"), weeklyProjects, app, openNote);
+	}
+
+	if (weeklyTypesRaw.length === 0) {
+		createColumn(weeklyColumns, "类型").createDiv("kd-field-empty").setText("让AI更好工作");
+	} else {
+		renderStackedRatioBar(createColumn(weeklyColumns, "类型"), weeklyTypes, app, openNote);
+	}
+
+	if (weeklyAuthors.length === 0) {
+		createColumn(weeklyColumns, "能力者").createDiv("kd-field-empty").setText("抢占首位");
+	} else {
+		renderLollipopChart(createColumn(weeklyColumns, "能力者"), weeklyAuthors, app, openNote);
+	}
 
 	const totalPanel = createPanel(wrapper, "累计沉淀");
 	totalPanel.addClass("kd-field-panel--cumulative");
@@ -94,6 +95,12 @@ export function renderFieldDistribution(
 	const totalLayout = totalPanel.createDiv("kd-field-panel-cumulative");
 	const cumulativeRow = totalLayout.createDiv("kd-cumulative-row");
 
+	renderBubbleDistribution(
+		createCumulativeColumn(cumulativeRow, "项目", "kd-cumulative-bubble"),
+		projectStats.map((s) => ({ key: s.key, count: s.total, items: s.totalItems })),
+		app,
+		openNote
+	);
 	renderTreemap(
 		createCumulativeColumn(cumulativeRow, "类型", "kd-cumulative-treemap"),
 		mergeSmallEntries(
@@ -104,14 +111,8 @@ export function renderFieldDistribution(
 		app,
 		openNote
 	);
-	renderBubbleDistribution(
-		createCumulativeColumn(cumulativeRow, "项目", "kd-cumulative-bubble"),
-		projectStats.map((s) => ({ key: s.key, count: s.total, items: s.totalItems })),
-		app,
-		openNote
-	);
-	renderParetoChart(
-		createCumulativeColumn(cumulativeRow, "能力者", "kd-cumulative-pareto"),
+	renderLollipopChart(
+		createCumulativeColumn(cumulativeRow, "能力者", "kd-cumulative-lollipop"),
 		authorStats.map((s) => ({ key: s.key, count: s.total, items: s.totalItems })),
 		app,
 		openNote
@@ -265,55 +266,6 @@ function renderStackedRatioBar(
 
 		item.addEventListener("click", () => {
 			showFieldModal(`类型 · ${entry.key}`, entry.items, app, openNote);
-		});
-	}
-}
-
-function renderParetoChart(
-	container: HTMLElement,
-	entries: DistributionEntry[],
-	app: App,
-	openNote: (file: NoteEntry["file"]) => void
-): void {
-	if (entries.length === 0) {
-		container.createDiv("kd-field-empty").setText("暂无数据");
-		return;
-	}
-
-	const sorted = entries.slice().sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
-	const total = sorted.reduce((sum, e) => sum + e.count, 0);
-	const maxCount = sorted[0].count;
-	const chart = container.createDiv("kd-pareto");
-
-	const cumulative: number[] = [];
-	let running = 0;
-	for (const entry of sorted) {
-		running += entry.count;
-		cumulative.push(total === 0 ? 0 : running / total);
-	}
-
-	const n = sorted.length;
-
-	for (let i = 0; i < sorted.length; i++) {
-		const entry = sorted[i];
-		const color = getRankColor(i);
-
-		const row = chart.createDiv("kd-pareto-row");
-
-		const label = row.createDiv("kd-pareto-label");
-		label.setText(entry.key);
-
-		const track = row.createDiv("kd-pareto-track");
-
-		const fill = track.createDiv("kd-pareto-fill");
-		fill.style.width = `${maxCount === 0 ? 0 : (entry.count / maxCount) * 100}%`;
-		fill.style.backgroundColor = color;
-
-		const value = track.createDiv("kd-pareto-value");
-		value.setText(String(entry.count));
-
-		row.addEventListener("click", () => {
-			showFieldModal(`能力者 · ${entry.key}`, entry.items, app, openNote);
 		});
 	}
 }
@@ -502,23 +454,17 @@ function renderTreemap(
 		label.style.wordBreak = "break-word";
 		label.style.lineHeight = "1.25";
 
-		// 根据矩形可用空间决定显示内容
-		const showBoth = rect.w >= 16 && rect.h >= 12;
+		// 默认只显示类型名称，不显示数量；数量通过 hover tooltip 展示
 		const showName = rect.w >= 10 && rect.h >= 8;
-		const showCount = rect.w >= 6 && rect.h >= 5;
-		if (showBoth) {
-			label.setText(`${rect.entry.key} ${rect.entry.count}`);
-			label.style.fontSize = "0.78rem";
-		} else if (showName) {
+		if (showName) {
 			label.setText(rect.entry.key);
-			label.style.fontSize = "0.72rem";
-		} else if (showCount) {
-			label.setText(String(rect.entry.count));
-			label.style.fontSize = "0.7rem";
-			label.style.opacity = "0.8";
+			label.style.fontSize = rect.w >= 16 && rect.h >= 12 ? "0.78rem" : "0.72rem";
+			label.style.opacity = "1";
 		} else {
 			label.style.display = "none";
 		}
+
+		setTooltip(cell, `${rect.entry.key}: ${rect.entry.count}`, { placement: "top" });
 
 		cell.addEventListener("click", () => {
 			showFieldModal(`类型 · ${rect.entry.key}`, rect.entry.items, app, openNote);

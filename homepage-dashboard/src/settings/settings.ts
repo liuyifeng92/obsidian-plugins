@@ -1,15 +1,16 @@
-import { App, Notice, PluginSettingTab, Setting } from "obsidian";
+import { App, Modal, Notice, PluginSettingTab, Setting, TFile } from "obsidian";
 import { DashboardCombination, DashboardLayout, HomeDashboardPluginLike, HomeDashboardSettings, LAYOUT_OPTIONS } from "../types";
 
 export const DEFAULT_SETTINGS: HomeDashboardSettings = {
-	homeViewTitle: "知识沉淀看板",
-	aggregatedFields: [],
+	homeViewTitle: "FutureLAB",
+	aggregatedFields: ["作者", "创建时间", "项目", "类型"],
 	fieldAliases: {},
-	dateFields: [],
+	dateFields: ["创建时间"],
 	fieldOrder: [],
 	defaultLayout: "dashboard",
 	dashboardCombinations: [],
 	autoUpdate: true,
+	heatmapColor: "#32DC14",
 };
 
 export class HomeDashboardSettingTab extends PluginSettingTab {
@@ -116,6 +117,18 @@ export class HomeDashboardSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					});
 			});
+
+		new Setting(containerEl)
+			.setName("热力图颜色")
+			.setDesc("日期热力图方块的基础颜色")
+			.addColorPicker((color) =>
+				color
+					.setValue(this.plugin.settings.heatmapColor)
+					.onChange(async (value) => {
+						this.plugin.settings.heatmapColor = value;
+						await this.plugin.saveSettings();
+					})
+			);
 
 		this.renderCombinationsSection(containerEl);
 		this.renderVersionUpdateSection(containerEl);
@@ -228,13 +241,13 @@ export class HomeDashboardSettingTab extends PluginSettingTab {
 			scanButton.setText("扫描中...");
 			scanButton.disabled = true;
 
-			const fields = await this.scanFields();
+			const results = await this.scanFields();
 
 			scanButton.setText("扫描字段");
 			scanButton.disabled = false;
 			resultContainer.empty();
 
-			if (fields.length === 0) {
+			if (results.length === 0) {
 				resultContainer.createEl("span", {
 					text: "未找到任何 frontmatter 字段。",
 					cls: "home-dashboard-scan-empty",
@@ -242,9 +255,13 @@ export class HomeDashboardSettingTab extends PluginSettingTab {
 				return;
 			}
 
-			for (const field of fields) {
+			for (const { field, files } of results) {
 				const isSelected = this.plugin.settings.aggregatedFields.includes(field);
-				const tag = resultContainer.createEl("button", {
+				const item = resultContainer.createEl("div", {
+					cls: "home-dashboard-scan-item",
+				});
+
+				const tag = item.createEl("button", {
 					text: field,
 					cls: `home-dashboard-scan-tag ${isSelected ? "is-selected" : ""}`,
 				});
@@ -257,22 +274,39 @@ export class HomeDashboardSettingTab extends PluginSettingTab {
 						this.display();
 					}
 				};
+
+				if (files.length > 0) {
+					const sourceBtn = item.createEl("button", {
+						text: String(files.length),
+						cls: "home-dashboard-scan-source-btn",
+					});
+					sourceBtn.title = "查看来源文件";
+					sourceBtn.onclick = (e) => {
+						e.stopPropagation();
+						new FieldSourceModal(this.app, field, files).open();
+					};
+				}
 			}
 		};
 	}
 
-	private async scanFields(): Promise<string[]> {
-		const fields = new Set<string>();
+	private async scanFields(): Promise<{ field: string; files: string[] }[]> {
+		const fieldMap = new Map<string, Set<string>>();
 		const files = this.app.vault.getMarkdownFiles();
 		for (const file of files) {
 			const cache = this.app.metadataCache.getFileCache(file);
 			if (cache?.frontmatter) {
 				for (const key of Object.keys(cache.frontmatter)) {
-					fields.add(key);
+					if (!fieldMap.has(key)) {
+						fieldMap.set(key, new Set());
+					}
+					fieldMap.get(key)!.add(file.path);
 				}
 			}
 		}
-		return Array.from(fields).sort();
+		return Array.from(fieldMap.entries())
+			.map(([field, fileSet]) => ({ field, files: Array.from(fileSet).sort() }))
+			.sort((a, b) => a.field.localeCompare(b.field));
 	}
 
 	private renderCombinationsSection(containerEl: HTMLElement): void {
@@ -458,4 +492,50 @@ function formatRecord(record: Record<string, string>): string {
 	return Object.entries(record)
 		.map(([key, value]) => `${key}=${value}`)
 		.join("\n");
+}
+
+class FieldSourceModal extends Modal {
+	private field: string;
+	private files: string[];
+
+	constructor(app: App, field: string, files: string[]) {
+		super(app);
+		this.field = field;
+		this.files = files;
+	}
+
+	onOpen(): void {
+		const { contentEl } = this;
+		contentEl.empty();
+		contentEl.createEl("h2", { text: `字段 "${this.field}" 的来源文件` });
+
+		const desc = contentEl.createEl("p", {
+			text: `共 ${this.files.length} 个文件包含此字段：`,
+			cls: "home-dashboard-scan-modal-desc",
+		});
+		desc.style.color = "var(--text-muted)";
+		desc.style.fontSize = "var(--font-smaller)";
+
+		const list = contentEl.createEl("ul", { cls: "home-dashboard-scan-source-list" });
+		for (const path of this.files) {
+			const li = list.createEl("li", { cls: "home-dashboard-scan-source-item" });
+			const link = li.createEl("a", {
+				text: path,
+				href: "#",
+				cls: "home-dashboard-scan-source-link",
+			});
+			link.onclick = (e: MouseEvent) => {
+				e.preventDefault();
+				const file = this.app.vault.getAbstractFileByPath(path);
+				if (file instanceof TFile) {
+					this.app.workspace.getLeaf().openFile(file);
+					this.close();
+				}
+			};
+		}
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+	}
 }

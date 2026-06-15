@@ -9,6 +9,7 @@
 	--kd-paper: #f1f5f9;
 	--kd-ink: #330000;
 	--kd-ink-700: #4a0a0a;
+	--kd-ink-50: rgba(51, 0, 0, 0.5);
 	--kd-stone: #e2e8f0;
 	--kd-stone-200: #cbd5e1;
 	--kd-stone-400: #94a3b8;
@@ -44,6 +45,41 @@
 	--kd-panel-border: var(--kd-ink);
 	--kd-module-bg: var(--kd-stone);
 	--kd-hover-surface: var(--kd-stone);
+
+	/* heatmap levels (light theme) */
+	--kd-heatmap-level-1: rgba(242, 48, 48, 0.2);
+	--kd-heatmap-level-2: rgba(242, 48, 48, 0.4);
+	--kd-heatmap-level-3: rgba(242, 48, 48, 0.6);
+	--kd-heatmap-level-4: rgba(242, 48, 48, 0.8);
+	--kd-heatmap-level-5: rgba(242, 48, 48, 1);
+}
+
+.theme-dark .home-dashboard-container,
+.theme-dark .home-dashboard-modal,
+.theme-dark .home-dashboard-heatmap-tooltip {
+	--kd-paper: #171717;
+	--kd-ink: #f2f2f0;
+	--kd-ink-700: #e8e8e6;
+	--kd-ink-50: rgba(242, 242, 240, 0.5);
+	--kd-stone: #2a2a2a;
+	--kd-stone-200: #3a3a3a;
+	--kd-stone-400: #6b6b6b;
+
+	--kd-brand-red: #ff4d4d;
+	--kd-brand-red-200: #5c2a2a;
+	--kd-brand-red-300: #8a3b3b;
+	--kd-brand-red-400: #b54d4d;
+	--kd-brand-red-700: #ff7373;
+	--kd-brand-red-900: #ff9999;
+
+	--kd-text-secondary: #a0a0a0;
+
+	/* heatmap levels (dark theme — slightly more saturated) */
+	--kd-heatmap-level-1: rgba(255, 77, 77, 0.25);
+	--kd-heatmap-level-2: rgba(255, 77, 77, 0.45);
+	--kd-heatmap-level-3: rgba(255, 77, 77, 0.65);
+	--kd-heatmap-level-4: rgba(255, 77, 77, 0.85);
+	--kd-heatmap-level-5: rgba(255, 77, 77, 1);
 }
 
 /* ---------------------------------------------------------
@@ -230,7 +266,7 @@
 
 .kd-field-panel-title,
 .home-dashboard-field-distribution-card-title {
-	font-size: 0.72rem;
+	font-size: 0.92rem;
 	font-weight: 800;
 	margin: 0 0 18px;
 	color: var(--kd-text-secondary);
@@ -267,6 +303,10 @@
 	margin-bottom: 18px;
 	gap: 12px;
 	flex-wrap: wrap;
+}
+
+.home-dashboard-section-header .home-dashboard-section-title {
+	margin-bottom: 0;
 }
 
 .home-dashboard-heatmap-controls {
@@ -454,7 +494,7 @@
 .kd-field-panel,
 .home-dashboard-field-distribution-card {
 	background-color: var(--kd-panel-bg);
-	border: 2px solid var(--kd-panel-border);
+	border: 0.5px solid var(--kd-ink-50);
 	border-radius: 0;
 	padding: 22px;
 }
@@ -502,7 +542,7 @@
 
 .kd-cumulative-treemap,
 .kd-cumulative-bubble,
-.kd-cumulative-pareto {
+.kd-cumulative-lollipop {
 	border: none;
 	background-color: transparent;
 }
@@ -633,7 +673,7 @@
 .home-dashboard-heatmap-cell-placeholder {
 	width: 13px;
 	height: 13px;
-	border-radius: 0;
+	border-radius: 2px;
 	border: 1px solid var(--kd-paper);
 }
 
@@ -655,28 +695,28 @@
 }
 
 .home-dashboard-heatmap-cell.level-0 {
-	background-color: var(--kd-stone);
+	background-color: var(--kd-track);
 	border-color: transparent;
 }
 
 .home-dashboard-heatmap-cell.level-1 {
-	background-color: rgba(242, 48, 48, 0.2);
+	background-color: var(--kd-heatmap-level-1);
 }
 
 .home-dashboard-heatmap-cell.level-2 {
-	background-color: rgba(242, 48, 48, 0.4);
+	background-color: var(--kd-heatmap-level-2);
 }
 
 .home-dashboard-heatmap-cell.level-3 {
-	background-color: rgba(242, 48, 48, 0.6);
+	background-color: var(--kd-heatmap-level-3);
 }
 
 .home-dashboard-heatmap-cell.level-4 {
-	background-color: rgba(242, 48, 48, 0.8);
+	background-color: var(--kd-heatmap-level-4);
 }
 
 .home-dashboard-heatmap-cell.level-5 {
-	background-color: rgba(242, 48, 48, 1);
+	background-color: var(--kd-heatmap-level-5);
 }
 
 /* ---------------------------------------------------------
@@ -948,9 +988,9 @@
 .kd-lollipop-row {
 	display: grid;
 	grid-template-columns: minmax(56px, auto) 1fr minmax(32px, auto);
-	gap: 0 2px;
+	gap: 0 8px;
 	align-items: center;
-	margin-bottom: 10px;
+	margin-bottom: 12px;
 	cursor: pointer;
 }
 
@@ -959,7 +999,7 @@
 }
 
 .kd-lollipop-row:hover .kd-lollipop-label {
-	color: var(--kd-brand-red);
+	opacity: 0.6;
 }
 
 .kd-lollipop-label {
@@ -975,7 +1015,7 @@
 .kd-lollipop-track {
 	position: relative;
 	height: 8px;
-	background-color: var(--kd-track);
+	background-color: var(--kd-stone);
 	border-radius: 0;
 	min-width: 20px;
 }
@@ -996,6 +1036,12 @@
 	font-size: 0.78rem;
 	font-weight: 900;
 	color: var(--kd-ink);
+}
+
+.kd-cumulative-lollipop .kd-lollipop-value {
+	text-align: left;
+	font-size: 0.68rem;
+	font-weight: 900;
 }
 
 /* ---------------------------------------------------------
@@ -1036,7 +1082,7 @@
 
 .kd-mini-card-label {
 	font-size: 0.6rem;
-	color: rgba(255, 255, 255, 0.95);
+	color: var(--kd-on-accent);
 	font-weight: 800;
 	text-transform: uppercase;
 	letter-spacing: 0.08em;
@@ -1063,7 +1109,7 @@
 	display: flex;
 	border-radius: 0;
 	overflow: hidden;
-	background-color: var(--kd-track);
+	background-color: var(--kd-stone);
 }
 
 .kd-stacked-bar-segment {
@@ -1293,7 +1339,6 @@
 	pointer-events: none;
 	text-transform: uppercase;
 	letter-spacing: 0.02em;
-	text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
 }
 
 /* ---------------------------------------------------------
@@ -1335,7 +1380,6 @@
 	font-weight: 900;
 	text-transform: uppercase;
 	letter-spacing: 0.03em;
-	text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
 }
 
 /* ---------------------------------------------------------
@@ -1575,6 +1619,61 @@
 	border-color: var(--kd-brand-red);
 	color: var(--kd-paper);
 	cursor: default;
+}
+
+.home-dashboard-scan-item {
+	display: inline-flex;
+	align-items: stretch;
+	gap: 0;
+}
+
+.home-dashboard-scan-source-btn {
+	padding: 6px 10px;
+	border: 2px solid var(--kd-ink);
+	border-left: none;
+	border-radius: 0;
+	background-color: var(--kd-stone);
+	color: var(--kd-ink);
+	font-size: 0.72em;
+	font-weight: 900;
+	cursor: pointer;
+	transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.home-dashboard-scan-source-btn:hover {
+	background-color: var(--kd-ink);
+	color: var(--kd-paper);
+}
+
+.home-dashboard-scan-source-list {
+	list-style: none;
+	padding: 0;
+	margin: 12px 0 0;
+	max-height: 360px;
+	overflow-y: auto;
+}
+
+.home-dashboard-scan-source-item {
+	padding: 6px 0;
+	border-bottom: 1px solid var(--kd-border-soft);
+}
+
+.home-dashboard-scan-source-item:last-child {
+	border-bottom: none;
+}
+
+.home-dashboard-scan-source-link {
+	color: var(--kd-ink);
+	text-decoration: none;
+	font-weight: 700;
+	font-size: 0.88em;
+	word-break: break-all;
+	transition: color 0.15s ease;
+}
+
+.home-dashboard-scan-source-link:hover {
+	color: var(--kd-brand-red);
+	text-decoration: underline;
 }
 
 /* ---------------------------------------------------------

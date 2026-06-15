@@ -42,7 +42,7 @@ export class DashboardRenderer implements LayoutRenderer {
 		const dateFieldsWithData = allFields.filter((field) => dateFields.includes(field));
 		if (dateFieldsWithData.length > 0) {
 			const section = sectionsWrapper.createDiv("home-dashboard-section");
-			renderHeatmap(section, result, dateFieldsWithData, searchKeyword, openNote, app);
+			renderHeatmap(section, result, dateFieldsWithData, searchKeyword, openNote, app, plugin.settings.heatmapColor);
 		}
 
 		if (nonDateFields.length > 0) {
@@ -100,7 +100,8 @@ function renderHeatmap(
 	dateFields: string[],
 	searchKeyword: string,
 	openNote: (file: NoteEntry["file"]) => void,
-	app: App
+	app: App,
+	heatmapColor: string
 ): void {
 	const currentYear = new Date().getFullYear();
 	let selectedYear = currentYear;
@@ -229,7 +230,9 @@ function renderHeatmap(
 					continue;
 				}
 
-				const cell = weekEl.createDiv(`home-dashboard-heatmap-cell level-${getHeatmapLevel(day.count)}`);
+				const level = getHeatmapLevel(day.count);
+				const cell = weekEl.createDiv("home-dashboard-heatmap-cell");
+				cell.style.backgroundColor = getHeatmapColor(level, heatmapColor);
 				cell.setAttr("aria-label", `${day.dateKey}: ${day.count} 条笔记`);
 
 				if (day.entries.length > 0) {
@@ -281,6 +284,30 @@ function getHeatmapLevel(count: number): number {
 		return 4;
 	}
 	return 5;
+}
+
+function getHeatmapColor(level: number, heatmapColor: string): string {
+	if (level === 0) {
+		return "";
+	}
+	const rgb = hexToRgb(heatmapColor);
+	if (!rgb) {
+		return "";
+	}
+	const alpha = level * 0.2;
+	return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
+}
+
+function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+	const normalized = hex.replace("#", "");
+	if (!/^[0-9A-Fa-f]{6}$/.test(normalized)) {
+		return null;
+	}
+	return {
+		r: parseInt(normalized.substring(0, 2), 16),
+		g: parseInt(normalized.substring(2, 4), 16),
+		b: parseInt(normalized.substring(4, 6), 16),
+	};
 }
 
 function buildHeatmapWeeks(startDate: Date, endDate: Date, dayMap: Map<string, HeatmapDay>): HeatmapWeek[] {
