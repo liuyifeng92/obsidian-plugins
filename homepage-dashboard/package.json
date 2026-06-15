@@ -1,6 +1,6 @@
 {
   "name": "obsidian-home-dashboard",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "基于 YAML frontmatter 的 Obsidian 独立主页汇总插件",
   "main": "main.js",
   "scripts": {
