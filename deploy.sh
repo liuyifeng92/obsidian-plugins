@@ -6,6 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # vault 插件目录
 VAULT_AUTO="/Users/liuyifeng/Library/Mobile Documents/iCloud~md~obsidian/Documents/FutureLAB/.obsidian/plugins/auto-frontmatter"
 VAULT_UPLOAD="/Users/liuyifeng/Library/Mobile Documents/iCloud~md~obsidian/Documents/FutureLAB/.obsidian/plugins/obsidian-image-auto-upload-plugin"
+VAULT_DASHBOARD="/Users/liuyifeng/Library/Mobile Documents/iCloud~md~obsidian/Documents/FutureLAB/.obsidian/plugins/homepage-dashboard"
 
 deploy_plugin() {
   local name=$1
@@ -27,7 +28,7 @@ deploy_plugin() {
   echo ""
 }
 
-# 可选参数：deploy.sh auto / deploy.sh upload / 不传则两个都部署
+# 可选参数：deploy.sh auto / upload / dashboard / 不传则全部部署
 case "${1:-all}" in
   auto)
     deploy_plugin "auto-frontmatter" "$VAULT_AUTO"
@@ -35,12 +36,16 @@ case "${1:-all}" in
   upload)
     deploy_plugin "file-auto-upload-plugin" "$VAULT_UPLOAD"
     ;;
+  dashboard)
+    deploy_plugin "homepage-dashboard" "$VAULT_DASHBOARD"
+    ;;
   all)
     deploy_plugin "auto-frontmatter" "$VAULT_AUTO"
     deploy_plugin "file-auto-upload-plugin" "$VAULT_UPLOAD"
+    deploy_plugin "homepage-dashboard" "$VAULT_DASHBOARD"
     ;;
   *)
-    echo "用法: ./deploy.sh [auto|upload|all]"
+    echo "用法: ./deploy.sh [auto|upload|dashboard|all]"
     exit 1
     ;;
 esac
