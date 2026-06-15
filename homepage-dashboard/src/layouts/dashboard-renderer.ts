@@ -1,6 +1,6 @@
 import { App, setIcon } from "obsidian";
 import { AggregatedResult, DashboardCombination, LayoutRenderer, NoteEntry, RenderOptions } from "../types";
-import { appendTag, formatDate, getFieldValue, loadSummary } from "./dashboard-helpers";
+import { appendTag, formatDate, getFieldValue, hexToRgb, loadSummary } from "./dashboard-helpers";
 import { renderFieldDistribution } from "./dashboard-field-renderer";
 
 interface HeatmapDay {
@@ -47,7 +47,7 @@ export class DashboardRenderer implements LayoutRenderer {
 
 		if (nonDateFields.length > 0) {
 			const section = sectionsWrapper.createDiv("home-dashboard-section kd-field-section");
-			renderFieldDistribution(section, result, plugin.settings.fieldAliases, app, openNote);
+			renderFieldDistribution(section, result, plugin.settings.fieldAliases, app, openNote, plugin.settings.fieldDistributionColor);
 		}
 
 		// 4) 数据组合卡片区
@@ -296,18 +296,6 @@ function getHeatmapColor(level: number, heatmapColor: string): string {
 	}
 	const alpha = level * 0.2;
 	return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
-}
-
-function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
-	const normalized = hex.replace("#", "");
-	if (!/^[0-9A-Fa-f]{6}$/.test(normalized)) {
-		return null;
-	}
-	return {
-		r: parseInt(normalized.substring(0, 2), 16),
-		g: parseInt(normalized.substring(2, 4), 16),
-		b: parseInt(normalized.substring(4, 6), 16),
-	};
 }
 
 function buildHeatmapWeeks(startDate: Date, endDate: Date, dayMap: Map<string, HeatmapDay>): HeatmapWeek[] {

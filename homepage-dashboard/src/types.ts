@@ -43,6 +43,7 @@ export interface HomeDashboardSettings {
 	dashboardCombinations: DashboardCombination[];
 	autoUpdate: boolean;
 	heatmapColor: string;
+	fieldDistributionColor: string;
 }
 
 export interface HomeDashboardPluginLike {

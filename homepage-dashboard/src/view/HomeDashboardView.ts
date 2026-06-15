@@ -39,6 +39,7 @@ export class HomeDashboardView extends ItemView {
 	async onClose(): Promise<void> {
 		this.contentEl.empty();
 		this.container = null;
+		this.clearOrphanedTooltips();
 	}
 
 	async render(): Promise<void> {
@@ -46,6 +47,7 @@ export class HomeDashboardView extends ItemView {
 			return;
 		}
 
+		this.clearOrphanedTooltips();
 		this.container.empty();
 		this.renderHeader();
 
@@ -168,5 +170,9 @@ export class HomeDashboardView extends ItemView {
 
 	private openNote(file: TFile): void {
 		this.app.workspace.getLeaf().openFile(file);
+	}
+
+	private clearOrphanedTooltips(): void {
+		document.querySelectorAll(".home-dashboard-heatmap-tooltip").forEach((el) => el.remove());
 	}
 }

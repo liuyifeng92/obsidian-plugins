@@ -464,10 +464,13 @@
 }
 
 .kd-metric-item:nth-child(1) .kd-metric-label::before,
-.home-dashboard-kpi-card:nth-child(1) .home-dashboard-kpi-label::before,
+.home-dashboard-kpi-card:nth-child(1) .home-dashboard-kpi-label::before {
+	background-color: var(--kd-brand-red);
+}
+
 .kd-field-column-title:nth-child(1)::before,
 .home-dashboard-field-column-title:nth-child(1)::before {
-	background-color: var(--kd-brand-red);
+	background-color: var(--kd-field-red, var(--kd-brand-red));
 }
 
 .kd-metric-item:nth-child(3) .kd-metric-label::before,
@@ -596,11 +599,11 @@
 }
 
 .home-dashboard-field-bar:hover .home-dashboard-field-bar-fill {
-	background-color: var(--kd-brand-red);
+	background-color: var(--kd-field-red, var(--kd-brand-red));
 }
 
 .home-dashboard-field-bar:hover .home-dashboard-field-bar-label {
-	color: var(--kd-brand-red);
+	color: var(--kd-field-red, var(--kd-brand-red));
 }
 
 .home-dashboard-field-empty,
@@ -1089,7 +1092,6 @@
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
-	text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
 }
 
 /* ---------------------------------------------------------
@@ -1123,7 +1125,7 @@
 }
 
 .kd-stacked-bar-segment {
-	background-color: var(--kd-brand-red);
+	background-color: var(--kd-field-red, var(--kd-brand-red));
 }
 
 .kd-stacked-bar-scale {
@@ -1176,7 +1178,7 @@
 }
 
 .kd-legend-item:hover {
-	color: var(--kd-brand-red);
+	color: var(--kd-field-red, var(--kd-brand-red));
 }
 
 .kd-legend-swatch {
@@ -1306,8 +1308,7 @@
    --------------------------------------------------------- */
 .kd-bubble-chart {
 	width: 100%;
-	min-height: 240px;
-	height: 100%;
+	aspect-ratio: 260 / 220;
 	position: relative;
 	background-color: var(--kd-paper);
 	border-radius: 0;
@@ -1317,16 +1318,17 @@
 	width: 100%;
 	height: 100%;
 	display: block;
+	pointer-events: none;
 }
 
 .kd-bubble-circle {
 	stroke: none;
 	stroke-width: 0;
-	transition: filter 0.15s ease;
+	transition: filter 0.05s ease;
 	fill-opacity: 1;
 }
 
-.kd-bubble-group:hover .kd-bubble-circle {
+.kd-bubble-circle.is-hovered {
 	filter: brightness(1.1);
 }
 
@@ -1340,6 +1342,16 @@
 	text-transform: uppercase;
 	letter-spacing: 0.02em;
 }
+
+.kd-bubble-hit {
+	position: absolute;
+	border-radius: 50%;
+	cursor: pointer;
+	background: transparent;
+	z-index: 1;
+}
+
+
 
 /* ---------------------------------------------------------
    16. Treemap
@@ -1360,9 +1372,9 @@
 	border-radius: 0;
 	overflow: hidden;
 	display: flex;
-	align-items: center;
-	justify-content: center;
-	padding: 5px;
+	align-items: flex-start;
+	justify-content: flex-start;
+	padding: 6px 8px;
 	transition: filter 0.15s ease;
 	cursor: pointer;
 }
@@ -1374,9 +1386,10 @@
 
 .kd-treemap-label {
 	color: var(--kd-paper);
-	text-align: center;
+	text-align: left;
 	word-break: break-word;
 	line-height: 1.25;
+	font-size: 0.72rem;
 	font-weight: 900;
 	text-transform: uppercase;
 	letter-spacing: 0.03em;

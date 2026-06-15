@@ -52,3 +52,15 @@ export function loadSummary(entry: NoteEntry, app: App): string {
 
 	return "";
 }
+
+export function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+	const normalized = hex.replace("#", "");
+	if (!/^[0-9A-Fa-f]{6}$/.test(normalized)) {
+		return null;
+	}
+	return {
+		r: parseInt(normalized.substring(0, 2), 16),
+		g: parseInt(normalized.substring(2, 4), 16),
+		b: parseInt(normalized.substring(4, 6), 16),
+	};
+}

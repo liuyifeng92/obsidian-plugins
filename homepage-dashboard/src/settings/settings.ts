@@ -11,6 +11,7 @@ export const DEFAULT_SETTINGS: HomeDashboardSettings = {
 	dashboardCombinations: [],
 	autoUpdate: true,
 	heatmapColor: "#32DC14",
+	fieldDistributionColor: "#f23030",
 };
 
 export class HomeDashboardSettingTab extends PluginSettingTab {
@@ -126,6 +127,18 @@ export class HomeDashboardSettingTab extends PluginSettingTab {
 					.setValue(this.plugin.settings.heatmapColor)
 					.onChange(async (value) => {
 						this.plugin.settings.heatmapColor = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("字段分布主色")
+			.setDesc("字段分布图表（能力者、项目、类型）中使用的主色")
+			.addColorPicker((color) =>
+				color
+					.setValue(this.plugin.settings.fieldDistributionColor)
+					.onChange(async (value) => {
+						this.plugin.settings.fieldDistributionColor = value;
 						await this.plugin.saveSettings();
 					})
 			);

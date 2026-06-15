@@ -1,6 +1,6 @@
 import { App, setIcon, setTooltip } from "obsidian";
 import { AggregatedResult, NoteEntry } from "../types";
-import { appendTag, formatDate, getFieldValue, loadSummary } from "./dashboard-helpers";
+import { appendTag, formatDate, getFieldValue, hexToRgb, loadSummary } from "./dashboard-helpers";
 
 interface FieldStat {
 	key: string;
@@ -29,19 +29,18 @@ function mergeSmallEntries(entries: DistributionEntry[], threshold: number, othe
 	return [...big, other].sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
 }
 
-// 字段分布统一使用同一红色的透明度梯度：第 1 名 100%，之后每 2 名降一档
-const BASE_RED = "242, 48, 48";
 const RANK_RED_OPACITIES = [1, 0.8, 0.8, 0.6, 0.6, 0.4, 0.4, 0.2, 0.2];
+let currentBaseRed = "242, 48, 48";
 
-function getRankColor(index: number): string {
+function getRankColor(index: number, baseRed: string): string {
 	const opacity = RANK_RED_OPACITIES[index];
-	return opacity === undefined ? "var(--kd-ink)" : `rgba(${BASE_RED}, ${opacity})`;
+	return opacity === undefined ? "var(--kd-ink)" : `rgba(${baseRed}, ${opacity})`;
 }
 
 // 累计沉淀类型（矩形树图）层级较多，使用 10% 为档位、最低 10% 的透明度梯度
-function getTreemapRankColor(index: number): string {
+function getTreemapRankColor(index: number, baseRed: string): string {
 	const opacity = Math.max(0.1, 1 - index * 0.1);
-	return `rgba(${BASE_RED}, ${opacity})`;
+	return `rgba(${baseRed}, ${opacity})`;
 }
 
 export function renderFieldDistribution(
@@ -49,8 +48,13 @@ export function renderFieldDistribution(
 	result: AggregatedResult,
 	aliases: Record<string, string>,
 	app: App,
-	openNote: (file: NoteEntry["file"]) => void
+	openNote: (file: NoteEntry["file"]) => void,
+	fieldColor: string
 ): void {
+	const rgb = hexToRgb(fieldColor);
+	currentBaseRed = rgb ? `${rgb.r}, ${rgb.g}, ${rgb.b}` : "242, 48, 48";
+	container.style.setProperty("--kd-field-red", fieldColor);
+
 	const authorGroups = result["作者"] ?? {};
 	const projectGroups = result["项目"] ?? {};
 	const typeGroups = result["类型"] ?? {};
@@ -68,7 +72,7 @@ export function renderFieldDistribution(
 
 	const weeklyProjects = projectStats.filter((s) => s.weeklyNew > 0).map((s) => ({ key: s.key, count: s.weeklyNew, items: s.weeklyItems }));
 	const weeklyTypesRaw = typeStats.filter((s) => s.weeklyNew > 0).map((s) => ({ key: s.key, count: s.weeklyNew, items: s.weeklyItems }));
-	const weeklyTypes = mergeSmallEntries(weeklyTypesRaw, 10, "其他");
+	const weeklyTypes = mergeSmallEntries(weeklyTypesRaw, 1, "其他");
 	const weeklyAuthors = authorStats.filter((s) => s.weeklyNew > 0).map((s) => ({ key: s.key, count: s.weeklyNew, items: s.weeklyItems }));
 
 	if (weeklyProjects.length === 0) {
@@ -155,7 +159,7 @@ function renderLollipopChart(
 
 	for (let i = 0; i < sorted.length; i++) {
 		const entry = sorted[i];
-		const color = getRankColor(i);
+		const color = getRankColor(i, currentBaseRed);
 		const row = chart.createDiv("kd-lollipop-row");
 
 		const label = row.createDiv("kd-lollipop-label");
@@ -196,7 +200,7 @@ function renderMiniStatCards(
 
 	for (let i = 0; i < sorted.length; i++) {
 		const entry = sorted[i];
-		const color = getRankColor(i);
+		const color = getRankColor(i, currentBaseRed);
 		const card = grid.createDiv("kd-mini-card");
 		card.style.backgroundColor = color;
 		card.style.borderColor = "var(--kd-ink)";
@@ -235,7 +239,7 @@ function renderStackedRatioBar(
 		const pct = total === 0 ? 0 : entry.count / total;
 		const segment = bar.createDiv("kd-stacked-bar-segment");
 		segment.style.width = `${pct * 100}%`;
-		segment.style.backgroundColor = getRankColor(i);
+		segment.style.backgroundColor = getRankColor(i, currentBaseRed);
 		segment.addEventListener("click", () => {
 			showFieldModal(`类型 · ${entry.key}`, entry.items, app, openNote);
 		});
@@ -251,7 +255,7 @@ function renderStackedRatioBar(
 		const swatch = item.createDiv("kd-legend-swatch");
 		swatch.style.width = "10px";
 		swatch.style.height = "10px";
-		swatch.style.backgroundColor = getRankColor(i);
+		swatch.style.backgroundColor = getRankColor(i, currentBaseRed);
 
 		const label = item.createDiv("kd-legend-label");
 		label.setText(entry.key);
@@ -352,18 +356,14 @@ function renderBubbleDistribution(
 			}
 		}
 
-		placed.push({ x, y, r, entry, color: getRankColor(i) });
+		placed.push({ x, y, r, entry, color: getRankColor(i, currentBaseRed) });
 	}
 
 	const wrapper = container.createDiv("kd-bubble-chart");
 	wrapper.style.position = "relative";
 	wrapper.style.width = "100%";
-	wrapper.style.minHeight = "220px";
 
 	const svg = wrapper.createSvg("svg", { cls: "kd-bubble-svg", attr: { viewBox: `0 0 ${viewW} ${viewH}` } });
-	svg.style.width = "100%";
-	svg.style.height = "100%";
-	svg.style.display = "block";
 
 	for (const circle of placed) {
 		const g = svg.createSvg("g", { cls: "kd-bubble-group" });
@@ -374,28 +374,41 @@ function renderBubbleDistribution(
 		c.style.fill = circle.color;
 		c.style.fillOpacity = "1";
 
-		const label = g.createSvg("text", {
-			cls: "kd-bubble-label",
-			attr: { x: circle.x, y: circle.y, "text-anchor": "middle", "dominant-baseline": "middle" },
-		});
-		if (circle.r >= 38) {
-			label.setText(`${circle.entry.key} ${circle.entry.count}`);
-			label.style.fontSize = "0.75rem";
-		} else if (circle.r >= 24) {
+		if (circle.r >= 24) {
+			const label = g.createSvg("text", {
+				cls: "kd-bubble-label",
+				attr: { x: circle.x, y: circle.y, "text-anchor": "middle", "dominant-baseline": "middle" },
+			});
 			label.setText(circle.entry.key);
-			label.style.fontSize = "0.7rem";
-		} else if (circle.r >= 12) {
-			label.setText(String(circle.entry.count));
-			label.style.fontSize = "0.62rem";
-			label.style.opacity = "0.85";
-		} else {
-			label.style.display = "none";
+			if (circle.r >= 45) {
+				label.style.fontSize = "0.92rem";
+			} else if (circle.r >= 32) {
+				label.style.fontSize = "0.78rem";
+			} else {
+				label.style.fontSize = "0.68rem";
+			}
 		}
+	}
 
-		g.addEventListener("click", () => {
+	placed.forEach((circle, index) => {
+		const hit = wrapper.createDiv("kd-bubble-hit");
+		hit.style.left = `${((circle.x - circle.r) / viewW) * 100}%`;
+		hit.style.top = `${((circle.y - circle.r) / viewH) * 100}%`;
+		hit.style.width = `${((circle.r * 2) / viewW) * 100}%`;
+		hit.style.aspectRatio = "1 / 1";
+		setTooltip(hit, `${circle.entry.key}: ${circle.entry.count}`, { placement: "top", delay: 0 });
+
+		hit.addEventListener("mouseenter", () => {
+			svg.querySelectorAll(".kd-bubble-circle")[index]?.addClass("is-hovered");
+		});
+		hit.addEventListener("mouseleave", () => {
+			svg.querySelectorAll(".kd-bubble-circle")[index]?.removeClass("is-hovered");
+		});
+
+		hit.addEventListener("click", () => {
 			showFieldModal(`项目 · ${circle.entry.key}`, circle.entry.items, app, openNote);
 		});
-	}
+	});
 }
 
 interface TreemapRect {
@@ -440,17 +453,16 @@ function renderTreemap(
 		cell.style.width = `${rect.w}%`;
 		cell.style.height = `${rect.h}%`;
 		// 按面积排名使用红色深浅梯度（累计沉淀类型层级较多，使用 10% 档位）
-		const color = getTreemapRankColor(i);
+		const color = getTreemapRankColor(i, currentBaseRed);
 		cell.style.backgroundColor = color;
 		cell.style.overflow = "hidden";
 		cell.style.display = "flex";
-		cell.style.alignItems = "center";
-		cell.style.justifyContent = "center";
-		cell.style.padding = "5px";
+		cell.style.alignItems = "flex-start";
+		cell.style.justifyContent = "flex-start";
+		cell.style.padding = "6px 8px";
 		cell.style.boxSizing = "border-box";
 
 		const label = cell.createDiv("kd-treemap-label");
-		label.style.textAlign = "center";
 		label.style.wordBreak = "break-word";
 		label.style.lineHeight = "1.25";
 
@@ -458,13 +470,11 @@ function renderTreemap(
 		const showName = rect.w >= 10 && rect.h >= 8;
 		if (showName) {
 			label.setText(rect.entry.key);
-			label.style.fontSize = rect.w >= 16 && rect.h >= 12 ? "0.78rem" : "0.72rem";
-			label.style.opacity = "1";
 		} else {
 			label.style.display = "none";
 		}
 
-		setTooltip(cell, `${rect.entry.key}: ${rect.entry.count}`, { placement: "top" });
+		setTooltip(cell, `${rect.entry.key}: ${rect.entry.count}`, { placement: "top", delay: 0 });
 
 		cell.addEventListener("click", () => {
 			showFieldModal(`类型 · ${rect.entry.key}`, rect.entry.items, app, openNote);

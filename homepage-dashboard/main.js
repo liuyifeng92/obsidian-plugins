@@ -51,7 +51,8 @@ var DEFAULT_SETTINGS = {
   defaultLayout: "dashboard",
   dashboardCombinations: [],
   autoUpdate: true,
-  heatmapColor: "#32DC14"
+  heatmapColor: "#32DC14",
+  fieldDistributionColor: "#f23030"
 };
 var HomeDashboardSettingTab = class extends import_obsidian.PluginSettingTab {
   constructor(app, plugin) {
@@ -114,6 +115,12 @@ var HomeDashboardSettingTab = class extends import_obsidian.PluginSettingTab {
     new import_obsidian.Setting(containerEl).setName("\u70ED\u529B\u56FE\u989C\u8272").setDesc("\u65E5\u671F\u70ED\u529B\u56FE\u65B9\u5757\u7684\u57FA\u7840\u989C\u8272").addColorPicker(
       (color) => color.setValue(this.plugin.settings.heatmapColor).onChange(async (value) => {
         this.plugin.settings.heatmapColor = value;
+        await this.plugin.saveSettings();
+      })
+    );
+    new import_obsidian.Setting(containerEl).setName("\u5B57\u6BB5\u5206\u5E03\u4E3B\u8272").setDesc("\u5B57\u6BB5\u5206\u5E03\u56FE\u8868\uFF08\u80FD\u529B\u8005\u3001\u9879\u76EE\u3001\u7C7B\u578B\uFF09\u4E2D\u4F7F\u7528\u7684\u4E3B\u8272").addColorPicker(
+      (color) => color.setValue(this.plugin.settings.fieldDistributionColor).onChange(async (value) => {
+        this.plugin.settings.fieldDistributionColor = value;
         await this.plugin.saveSettings();
       })
     );
@@ -971,6 +978,17 @@ function loadSummary(entry, app) {
   }
   return "";
 }
+function hexToRgb(hex) {
+  const normalized = hex.replace("#", "");
+  if (!/^[0-9A-Fa-f]{6}$/.test(normalized)) {
+    return null;
+  }
+  return {
+    r: parseInt(normalized.substring(0, 2), 16),
+    g: parseInt(normalized.substring(2, 4), 16),
+    b: parseInt(normalized.substring(4, 6), 16)
+  };
+}
 
 // src/layouts/dashboard-field-renderer.ts
 var import_obsidian2 = require("obsidian");
@@ -986,18 +1004,21 @@ function mergeSmallEntries(entries, threshold, otherLabel) {
   };
   return [...big, other].sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
 }
-var BASE_RED = "242, 48, 48";
 var RANK_RED_OPACITIES = [1, 0.8, 0.8, 0.6, 0.6, 0.4, 0.4, 0.2, 0.2];
-function getRankColor(index) {
+var currentBaseRed = "242, 48, 48";
+function getRankColor(index, baseRed) {
   const opacity = RANK_RED_OPACITIES[index];
-  return opacity === void 0 ? "var(--kd-ink)" : `rgba(${BASE_RED}, ${opacity})`;
+  return opacity === void 0 ? "var(--kd-ink)" : `rgba(${baseRed}, ${opacity})`;
 }
-function getTreemapRankColor(index) {
+function getTreemapRankColor(index, baseRed) {
   const opacity = Math.max(0.1, 1 - index * 0.1);
-  return `rgba(${BASE_RED}, ${opacity})`;
+  return `rgba(${baseRed}, ${opacity})`;
 }
-function renderFieldDistribution(container, result, aliases, app, openNote) {
+function renderFieldDistribution(container, result, aliases, app, openNote, fieldColor) {
   var _a, _b, _c;
+  const rgb = hexToRgb(fieldColor);
+  currentBaseRed = rgb ? `${rgb.r}, ${rgb.g}, ${rgb.b}` : "242, 48, 48";
+  container.style.setProperty("--kd-field-red", fieldColor);
   const authorGroups = (_a = result["\u4F5C\u8005"]) != null ? _a : {};
   const projectGroups = (_b = result["\u9879\u76EE"]) != null ? _b : {};
   const typeGroups = (_c = result["\u7C7B\u578B"]) != null ? _c : {};
@@ -1011,7 +1032,7 @@ function renderFieldDistribution(container, result, aliases, app, openNote) {
   const weeklyColumns = weeklyPanel.createDiv("kd-field-panel-columns");
   const weeklyProjects = projectStats.filter((s) => s.weeklyNew > 0).map((s) => ({ key: s.key, count: s.weeklyNew, items: s.weeklyItems }));
   const weeklyTypesRaw = typeStats.filter((s) => s.weeklyNew > 0).map((s) => ({ key: s.key, count: s.weeklyNew, items: s.weeklyItems }));
-  const weeklyTypes = mergeSmallEntries(weeklyTypesRaw, 10, "\u5176\u4ED6");
+  const weeklyTypes = mergeSmallEntries(weeklyTypesRaw, 1, "\u5176\u4ED6");
   const weeklyAuthors = authorStats.filter((s) => s.weeklyNew > 0).map((s) => ({ key: s.key, count: s.weeklyNew, items: s.weeklyItems }));
   if (weeklyProjects.length === 0) {
     createColumn(weeklyColumns, "\u9879\u76EE").createDiv("kd-field-empty").setText("\u8BA9\u9879\u76EE\u66F4\u5F3A");
@@ -1080,7 +1101,7 @@ function renderLollipopChart(container, entries, app, openNote, columnTitle) {
   const chart = container.createDiv("kd-lollipop-chart");
   for (let i = 0; i < sorted.length; i++) {
     const entry = sorted[i];
-    const color = getRankColor(i);
+    const color = getRankColor(i, currentBaseRed);
     const row = chart.createDiv("kd-lollipop-row");
     const label = row.createDiv("kd-lollipop-label");
     label.setText(entry.key);
@@ -1105,7 +1126,7 @@ function renderMiniStatCards(container, entries, app, openNote) {
   const sorted = entries.slice().sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
   for (let i = 0; i < sorted.length; i++) {
     const entry = sorted[i];
-    const color = getRankColor(i);
+    const color = getRankColor(i, currentBaseRed);
     const card = grid.createDiv("kd-mini-card");
     card.style.backgroundColor = color;
     card.style.borderColor = "var(--kd-ink)";
@@ -1132,7 +1153,7 @@ function renderStackedRatioBar(container, entries, app, openNote) {
     const pct = total === 0 ? 0 : entry.count / total;
     const segment = bar.createDiv("kd-stacked-bar-segment");
     segment.style.width = `${pct * 100}%`;
-    segment.style.backgroundColor = getRankColor(i);
+    segment.style.backgroundColor = getRankColor(i, currentBaseRed);
     segment.addEventListener("click", () => {
       showFieldModal(`\u7C7B\u578B \xB7 ${entry.key}`, entry.items, app, openNote);
     });
@@ -1145,7 +1166,7 @@ function renderStackedRatioBar(container, entries, app, openNote) {
     const swatch = item.createDiv("kd-legend-swatch");
     swatch.style.width = "10px";
     swatch.style.height = "10px";
-    swatch.style.backgroundColor = getRankColor(i);
+    swatch.style.backgroundColor = getRankColor(i, currentBaseRed);
     const label = item.createDiv("kd-legend-label");
     label.setText(entry.key);
     label.style.overflow = "hidden";
@@ -1220,16 +1241,12 @@ function renderBubbleDistribution(container, entries, app, openNote) {
         }
       }
     }
-    placed.push({ x, y, r, entry, color: getRankColor(i) });
+    placed.push({ x, y, r, entry, color: getRankColor(i, currentBaseRed) });
   }
   const wrapper = container.createDiv("kd-bubble-chart");
   wrapper.style.position = "relative";
   wrapper.style.width = "100%";
-  wrapper.style.minHeight = "220px";
   const svg = wrapper.createSvg("svg", { cls: "kd-bubble-svg", attr: { viewBox: `0 0 ${viewW} ${viewH}` } });
-  svg.style.width = "100%";
-  svg.style.height = "100%";
-  svg.style.display = "block";
   for (const circle of placed) {
     const g = svg.createSvg("g", { cls: "kd-bubble-group" });
     const c = g.createSvg("circle", {
@@ -1238,27 +1255,40 @@ function renderBubbleDistribution(container, entries, app, openNote) {
     });
     c.style.fill = circle.color;
     c.style.fillOpacity = "1";
-    const label = g.createSvg("text", {
-      cls: "kd-bubble-label",
-      attr: { x: circle.x, y: circle.y, "text-anchor": "middle", "dominant-baseline": "middle" }
-    });
-    if (circle.r >= 38) {
-      label.setText(`${circle.entry.key} ${circle.entry.count}`);
-      label.style.fontSize = "0.75rem";
-    } else if (circle.r >= 24) {
+    if (circle.r >= 24) {
+      const label = g.createSvg("text", {
+        cls: "kd-bubble-label",
+        attr: { x: circle.x, y: circle.y, "text-anchor": "middle", "dominant-baseline": "middle" }
+      });
       label.setText(circle.entry.key);
-      label.style.fontSize = "0.7rem";
-    } else if (circle.r >= 12) {
-      label.setText(String(circle.entry.count));
-      label.style.fontSize = "0.62rem";
-      label.style.opacity = "0.85";
-    } else {
-      label.style.display = "none";
+      if (circle.r >= 45) {
+        label.style.fontSize = "0.92rem";
+      } else if (circle.r >= 32) {
+        label.style.fontSize = "0.78rem";
+      } else {
+        label.style.fontSize = "0.68rem";
+      }
     }
-    g.addEventListener("click", () => {
+  }
+  placed.forEach((circle, index) => {
+    const hit = wrapper.createDiv("kd-bubble-hit");
+    hit.style.left = `${(circle.x - circle.r) / viewW * 100}%`;
+    hit.style.top = `${(circle.y - circle.r) / viewH * 100}%`;
+    hit.style.width = `${circle.r * 2 / viewW * 100}%`;
+    hit.style.aspectRatio = "1 / 1";
+    (0, import_obsidian2.setTooltip)(hit, `${circle.entry.key}: ${circle.entry.count}`, { placement: "top", delay: 0 });
+    hit.addEventListener("mouseenter", () => {
+      var _a;
+      (_a = svg.querySelectorAll(".kd-bubble-circle")[index]) == null ? void 0 : _a.addClass("is-hovered");
+    });
+    hit.addEventListener("mouseleave", () => {
+      var _a;
+      (_a = svg.querySelectorAll(".kd-bubble-circle")[index]) == null ? void 0 : _a.removeClass("is-hovered");
+    });
+    hit.addEventListener("click", () => {
       showFieldModal(`\u9879\u76EE \xB7 ${circle.entry.key}`, circle.entry.items, app, openNote);
     });
-  }
+  });
 }
 function renderTreemap(container, entries, app, openNote) {
   if (entries.length === 0) {
@@ -1282,27 +1312,24 @@ function renderTreemap(container, entries, app, openNote) {
     cell.style.top = `${rect.y}%`;
     cell.style.width = `${rect.w}%`;
     cell.style.height = `${rect.h}%`;
-    const color = getTreemapRankColor(i);
+    const color = getTreemapRankColor(i, currentBaseRed);
     cell.style.backgroundColor = color;
     cell.style.overflow = "hidden";
     cell.style.display = "flex";
-    cell.style.alignItems = "center";
-    cell.style.justifyContent = "center";
-    cell.style.padding = "5px";
+    cell.style.alignItems = "flex-start";
+    cell.style.justifyContent = "flex-start";
+    cell.style.padding = "6px 8px";
     cell.style.boxSizing = "border-box";
     const label = cell.createDiv("kd-treemap-label");
-    label.style.textAlign = "center";
     label.style.wordBreak = "break-word";
     label.style.lineHeight = "1.25";
     const showName = rect.w >= 10 && rect.h >= 8;
     if (showName) {
       label.setText(rect.entry.key);
-      label.style.fontSize = rect.w >= 16 && rect.h >= 12 ? "0.78rem" : "0.72rem";
-      label.style.opacity = "1";
     } else {
       label.style.display = "none";
     }
-    (0, import_obsidian2.setTooltip)(cell, `${rect.entry.key}: ${rect.entry.count}`, { placement: "top" });
+    (0, import_obsidian2.setTooltip)(cell, `${rect.entry.key}: ${rect.entry.count}`, { placement: "top", delay: 0 });
     cell.addEventListener("click", () => {
       showFieldModal(`\u7C7B\u578B \xB7 ${rect.entry.key}`, rect.entry.items, app, openNote);
     });
@@ -1493,7 +1520,7 @@ var DashboardRenderer = class {
     }
     if (nonDateFields.length > 0) {
       const section = sectionsWrapper.createDiv("home-dashboard-section kd-field-section");
-      renderFieldDistribution(section, result, plugin.settings.fieldAliases, app, openNote);
+      renderFieldDistribution(section, result, plugin.settings.fieldAliases, app, openNote, plugin.settings.fieldDistributionColor);
     }
     const combinations = plugin.settings.dashboardCombinations || [];
     if (combinations.length > 0) {
@@ -1675,17 +1702,6 @@ function getHeatmapColor(level, heatmapColor) {
   }
   const alpha = level * 0.2;
   return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
-}
-function hexToRgb(hex) {
-  const normalized = hex.replace("#", "");
-  if (!/^[0-9A-Fa-f]{6}$/.test(normalized)) {
-    return null;
-  }
-  return {
-    r: parseInt(normalized.substring(0, 2), 16),
-    g: parseInt(normalized.substring(2, 4), 16),
-    b: parseInt(normalized.substring(4, 6), 16)
-  };
 }
 function buildHeatmapWeeks(startDate, endDate, dayMap) {
   var _a;
@@ -1958,11 +1974,13 @@ var HomeDashboardView = class extends import_obsidian4.ItemView {
   async onClose() {
     this.contentEl.empty();
     this.container = null;
+    this.clearOrphanedTooltips();
   }
   async render() {
     if (!this.container) {
       return;
     }
+    this.clearOrphanedTooltips();
     this.container.empty();
     this.renderHeader();
     const loadingEl = this.container.createDiv("home-dashboard-loading");
@@ -2068,6 +2086,9 @@ var HomeDashboardView = class extends import_obsidian4.ItemView {
   }
   openNote(file) {
     this.app.workspace.getLeaf().openFile(file);
+  }
+  clearOrphanedTooltips() {
+    document.querySelectorAll(".home-dashboard-heatmap-tooltip").forEach((el) => el.remove());
   }
 };
 
