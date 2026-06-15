@@ -127,9 +127,10 @@ https://raw.githubusercontent.com/liuyifeng92/obsidian-plugins/main/{插件目�
 **构建产物 `main.js` 必须提交到 git**（不在 .gitignore 中忽略），OTA 更新依赖从 GitHub 下载 main.js。
 
 **版本号工作流：**
-1. 改代码 + 递增三级版本号
+1. 改代码
 2. `pnpm build`
 3. `./deploy.sh {插件}` 部署到本地测试
-4. 测试通过后 `git add . && git commit -m "描述"`
-5. 推送前询问用户是否需要升级二级或一级版本号
-6. 确认后 `git push`，远端版本号即为 OTA 可检测的最新版本
+4. 测试通过后 `git add . && git commit -m "描述"`（提交代码改动）
+5. 递增三级版本号并自动打 tag：`npm version patch`（会自动更新 `package.json`、`manifest.json`、`versions.json`，并生成 commit + tag，如 `v1.0.1`）
+6. 推送前询问用户是否需要升级二级或一级版本号
+7. 确认后 `git push && git push --tags`，远端版本号即为 OTA 可检测的最新版本
