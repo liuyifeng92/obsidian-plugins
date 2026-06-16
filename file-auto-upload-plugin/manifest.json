@@ -1,7 +1,7 @@
 {
   "id": "file-auto-upload-plugin",
   "name": "【FutureLAB】File Auto Upload",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "minAppVersion": "0.10.7",
   "description": "通过 PicGo 自动上传剪贴板、拖拽和根目录中的图片及音视频文件，并替换笔记中的本地引用；同时支持在笔记中通过 html-preview 代码块预览 HTML 文件。",
   "author": "刘一锋",
