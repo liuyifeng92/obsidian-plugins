@@ -91,6 +91,22 @@ image-auto-upload: true
 设置路径，默认为空，使用环境变量
 也可以设置自定义路径
 
+## HTML 文件预览
+
+在笔记中使用 `html-preview` 代码块即可直接嵌入并预览 HTML 文件。
+
+```html-preview
+path:path/to/your/file.html
+```
+
+也可以直接粘贴 HTML 源码：
+
+```html-preview
+<h1>Hello World</h1>
+```
+
+预览支持查看源码、全屏弹窗以及拖拽调整高度。
+
 ## 常见问题
 
 ### MacOs 下无法长传

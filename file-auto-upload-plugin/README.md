@@ -69,6 +69,22 @@ If you upload fail when you paste img, you can alse try to enable the mode.
 
 You can install picgo-core with npm. Reference to [doc](https://picgo.github.io/PicGo-Core-Doc/)
 
+## HTML file preview
+
+Use an `html-preview` code block to embed and preview HTML files directly in your notes.
+
+```html-preview
+path:path/to/your/file.html
+```
+
+Or paste the HTML source directly:
+
+```html-preview
+<h1>Hello World</h1>
+```
+
+The preview supports source view, fullscreen modal, and resizable height.
+
 # TODO
 
 - [x] upload all local images file by command
