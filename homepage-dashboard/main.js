@@ -40,7 +40,8 @@ var DEFAULT_SETTINGS = {
   dashboardCombinations: [],
   autoUpdate: true,
   heatmapColor: "#28B80F",
-  fieldDistributionColor: "#B01111"
+  fieldDistributionColor: "#B01111",
+  autoOpenOnStartup: true
 };
 var HomeDashboardSettingTab = class extends import_obsidian.PluginSettingTab {
   constructor(app, plugin) {
@@ -87,6 +88,12 @@ var HomeDashboardSettingTab = class extends import_obsidian.PluginSettingTab {
     }
   }
   renderGeneralSettings(contentEl) {
+    new import_obsidian.Setting(contentEl).setName("\u81EA\u52A8\u6253\u5F00 Dashboard").setDesc("\u6BCF\u6B21\u542F\u52A8 Obsidian \u6216\u6BCF\u5929\u9996\u6B21\u5207\u56DE\u65F6\u81EA\u52A8\u8FDB\u5165 Dashboard\u3002").addToggle(
+      (toggle) => toggle.setValue(this.plugin.settings.autoOpenOnStartup).onChange(async (value) => {
+        this.plugin.settings.autoOpenOnStartup = value;
+        await this.plugin.saveSettings();
+      })
+    );
     new import_obsidian.Setting(contentEl).setName("\u4E3B\u9875\u6807\u9898").setDesc("\u81EA\u5B9A\u4E49\u4E3B\u9875\u89C6\u56FE\u7684\u6807\u9898").addText(
       (text) => text.setPlaceholder("\u4E3B\u9875").setValue(this.plugin.settings.homeViewTitle).onChange(async (value) => {
         this.plugin.settings.homeViewTitle = value || "\u4E3B\u9875";
@@ -1031,14 +1038,14 @@ function renderFieldDistribution(container, result, aliases, app, openNote, fiel
     renderStackedRatioBar(createColumn(weeklyColumns, "\u7C7B\u578B"), weeklyTypes, app, openNote);
   }
   if (weeklyAuthors.length === 0) {
-    createColumn(weeklyColumns, "\u80FD\u529B\u8005").createDiv("kd-field-empty").setText("\u62A2\u5360\u9996\u4F4D");
+    createColumn(weeklyColumns, "\u4F5C\u8005").createDiv("kd-field-empty").setText("\u62A2\u5360\u9996\u4F4D");
   } else {
-    renderLollipopChart(createColumn(weeklyColumns, "\u80FD\u529B\u8005"), weeklyAuthors, app, openNote);
+    renderLollipopChart(createColumn(weeklyColumns, "\u4F5C\u8005"), weeklyAuthors, app, openNote, void 0, true);
   }
   const totalPanel = createPanel(wrapper, "\u5386\u53F2\u5168\u5C40");
   totalPanel.addClass("kd-field-panel--cumulative");
   const totalLayout = totalPanel.createDiv("kd-field-panel-cumulative");
-  const cumulativeRow = totalLayout.createDiv("kd-cumulative-row");
+  const cumulativeRow = totalLayout.createDiv("kd-field-panel-columns");
   renderBubbleDistribution(
     createCumulativeColumn(cumulativeRow, "\u9879\u76EE", "kd-cumulative-bubble"),
     projectStats.map((s) => ({ key: s.key, count: s.total, items: s.totalItems })),
@@ -1056,10 +1063,12 @@ function renderFieldDistribution(container, result, aliases, app, openNote, fiel
     openNote
   );
   renderLollipopChart(
-    createCumulativeColumn(cumulativeRow, "\u80FD\u529B\u8005", "kd-cumulative-lollipop"),
+    createColumn(cumulativeRow, "\u4F5C\u8005"),
     authorStats.map((s) => ({ key: s.key, count: s.total, items: s.totalItems })),
     app,
-    openNote
+    openNote,
+    void 0,
+    true
   );
 }
 function createPanel(wrapper, title) {
@@ -1077,7 +1086,7 @@ function createCumulativeColumn(container, title, extraCls) {
   column.createEl("h4", { cls: "kd-field-column-title", text: title });
   return column;
 }
-function renderLollipopChart(container, entries, app, openNote, columnTitle) {
+function renderLollipopChart(container, entries, app, openNote, columnTitle, showCrownForFirst) {
   if (entries.length === 0) {
     container.createDiv("kd-field-empty").setText("\u6682\u65E0\u6570\u636E");
     return;
@@ -1090,7 +1099,7 @@ function renderLollipopChart(container, entries, app, openNote, columnTitle) {
     const color = getRankColor(i, currentBaseRed);
     const row = chart.createDiv("kd-lollipop-row");
     const label = row.createDiv("kd-lollipop-label");
-    label.setText(entry.key);
+    label.setText(showCrownForFirst && i === 0 ? `${entry.key} \u{1F451}` : entry.key);
     const track = row.createDiv("kd-lollipop-track");
     const widthPct = maxCount === 0 ? 0 : entry.count / maxCount * 100;
     const fill = track.createDiv("kd-lollipop-fill");
@@ -1099,7 +1108,7 @@ function renderLollipopChart(container, entries, app, openNote, columnTitle) {
     const value = row.createDiv("kd-lollipop-value");
     value.setText(String(entry.count));
     row.addEventListener("click", () => {
-      showFieldModal(`${columnTitle || "\u80FD\u529B\u8005"} \xB7 ${entry.key}`, entry.items, app, openNote);
+      showFieldModal(`${columnTitle || "\u4F5C\u8005"} \xB7 ${entry.key}`, entry.items, app, openNote);
     });
   }
 }
@@ -1501,7 +1510,7 @@ var DashboardRenderer = class {
     const sectionsWrapper = container.createDiv("home-dashboard-sections-wrapper");
     const dateFieldsWithData = allFields.filter((field) => dateFields.includes(field));
     if (dateFieldsWithData.length > 0) {
-      const section = sectionsWrapper.createDiv("home-dashboard-section");
+      const section = sectionsWrapper.createDiv("home-dashboard-section kd-heatmap-section");
       renderHeatmap(container, section, result, dateFieldsWithData, searchKeyword, openNote, app, plugin.settings.heatmapColor);
     }
     if (nonDateFields.length > 0) {
@@ -1538,23 +1547,24 @@ function renderHeatmap(stateContainer, container, result, dateFields, searchKeyw
   const header = container.createDiv("home-dashboard-section-header");
   header.createEl("h2", { cls: "home-dashboard-section-title", text: "\u6C89\u6DC0\u65E5\u5386" });
   const controls = header.createDiv("home-dashboard-heatmap-controls");
-  const authorSelect = controls.createEl("select", { cls: "home-dashboard-year-select" });
-  authorSelect.createEl("option", { text: "\u5168\u5458", value: "" });
-  for (const name of authorNames) {
-    const option = authorSelect.createEl("option", { text: name, value: name });
-    if (name === selectedAuthor) {
-      option.selected = true;
-    }
-  }
-  const yearSelect = controls.createEl("select", { cls: "home-dashboard-year-select" });
+  const yearOptions = [];
   for (let y = currentYear - 5; y <= currentYear + 1; y++) {
-    const option = yearSelect.createEl("option", { text: `${y}\u5E74`, value: String(y) });
-    if (y === selectedYear) {
-      option.selected = true;
-    }
+    yearOptions.push({ value: String(y), label: `${y}\u5E74` });
   }
-  authorSelect.value = selectedAuthor;
-  yearSelect.value = String(selectedYear);
+  renderDropdown(controls, "home-dashboard-year-menu", yearOptions, String(selectedYear), (value) => {
+    selectedYear = Number(value);
+    stateContainer.dataset.heatmapYear = value;
+    renderContent();
+  });
+  const authorOptions = [{ value: "", label: "\u5168\u5458" }];
+  for (const name of authorNames) {
+    authorOptions.push({ value: name, label: name });
+  }
+  renderDropdown(controls, "home-dashboard-author-menu", authorOptions, selectedAuthor, (value) => {
+    selectedAuthor = value;
+    stateContainer.dataset.heatmapAuthor = selectedAuthor;
+    renderContent();
+  });
   const heatmapContainer = container.createDiv("home-dashboard-heatmap-container");
   const renderContent = () => {
     var _a2;
@@ -1655,19 +1665,70 @@ function renderHeatmap(stateContainer, container, result, dateFields, searchKeyw
       }
     }
   };
-  authorSelect.addEventListener("change", (event) => {
-    const target = event.currentTarget;
-    selectedAuthor = target.value;
-    stateContainer.dataset.heatmapAuthor = selectedAuthor;
-    requestAnimationFrame(() => renderContent());
-  });
-  yearSelect.addEventListener("change", (event) => {
-    const target = event.currentTarget;
-    selectedYear = Number(target.value);
-    stateContainer.dataset.heatmapYear = String(selectedYear);
-    requestAnimationFrame(() => renderContent());
-  });
   renderContent();
+}
+function renderDropdown(container, menuClass, options, selectedValue, onChange) {
+  var _a;
+  const oldMenu = document.querySelector(`.${menuClass}`);
+  if (oldMenu == null ? void 0 : oldMenu.closeMenu) {
+    oldMenu.closeMenu();
+  }
+  const selectedOption = (_a = options.find((option) => option.value === selectedValue)) != null ? _a : options[0];
+  const wrapper = container.createDiv("home-dashboard-dropdown");
+  const trigger = wrapper.createEl("button", {
+    cls: "home-dashboard-dropdown-trigger",
+    text: selectedOption.label,
+    type: "button"
+  });
+  const menu = wrapper.createDiv(`home-dashboard-dropdown-menu ${menuClass}`);
+  menu.style.display = "none";
+  const addOption = (value, label) => {
+    const item = menu.createDiv("home-dashboard-dropdown-item");
+    item.setText(label);
+    if (value === selectedValue) {
+      item.addClass("is-selected");
+    }
+    item.addEventListener("click", (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      onChange(value);
+      trigger.setText(label);
+      menu.querySelectorAll(".home-dashboard-dropdown-item").forEach((el) => el.removeClass("is-selected"));
+      item.addClass("is-selected");
+      closeMenu();
+    });
+  };
+  for (const option of options) {
+    addOption(option.value, option.label);
+  }
+  let closeHandler = null;
+  const openMenu = () => {
+    menu.style.display = "block";
+    requestAnimationFrame(() => {
+      closeHandler = (e) => {
+        if (!wrapper.contains(e.target)) {
+          closeMenu();
+        }
+      };
+      document.addEventListener("click", closeHandler, { capture: true });
+    });
+  };
+  const closeMenu = () => {
+    menu.style.display = "none";
+    if (closeHandler) {
+      document.removeEventListener("click", closeHandler, { capture: true });
+      closeHandler = null;
+    }
+  };
+  menu.closeMenu = closeMenu;
+  trigger.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (menu.style.display === "block") {
+      closeMenu();
+    } else {
+      openMenu();
+    }
+  });
 }
 function getHeatmapLevel(count) {
   if (count === 0) {
@@ -2084,6 +2145,7 @@ var HomeDashboardPlugin = class extends import_obsidian5.Plugin {
     this.autoUpdateCheckTimer = null;
     this.pendingAutoReloadTimer = null;
     this.pendingAutoReloadVersion = "";
+    this.lastFocusDate = new Date().toDateString();
     this.debouncedRefresh = debounce(() => {
       void this.refreshActiveView();
     }, 2e3);
@@ -2094,6 +2156,20 @@ var HomeDashboardPlugin = class extends import_obsidian5.Plugin {
       VIEW_TYPE_HOME_DASHBOARD,
       (leaf) => new HomeDashboardView(leaf, this)
     );
+    this.app.workspace.onLayoutReady(() => {
+      if (this.settings.autoOpenOnStartup) {
+        void this.activateDashboardView();
+      }
+    });
+    this.registerDomEvent(window, "focus", () => {
+      const today = new Date().toDateString();
+      if (today !== this.lastFocusDate) {
+        this.lastFocusDate = today;
+        if (this.settings.autoOpenOnStartup) {
+          void this.activateDashboardView();
+        }
+      }
+    });
     this.addCommand({
       id: "open-home-dashboard",
       name: "\u6253\u5F00\u4E3B\u9875",
@@ -2152,6 +2228,15 @@ var HomeDashboardPlugin = class extends import_obsidian5.Plugin {
       type: VIEW_TYPE_HOME_DASHBOARD,
       active: true
     });
+  }
+  async activateDashboardView() {
+    const existing = this.app.workspace.getLeavesOfType(VIEW_TYPE_HOME_DASHBOARD);
+    if (existing.length > 0) {
+      this.app.workspace.revealLeaf(existing[0]);
+      return;
+    }
+    const leaf = this.app.workspace.getLeaf(false);
+    await leaf.setViewState({ type: VIEW_TYPE_HOME_DASHBOARD, active: true });
   }
   async checkForUpdate() {
     var _a;

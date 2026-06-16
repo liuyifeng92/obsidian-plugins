@@ -13,6 +13,7 @@ export const DEFAULT_SETTINGS: HomeDashboardSettings = {
 	autoUpdate: true,
 	heatmapColor: "#28B80F",
 	fieldDistributionColor: "#B01111",
+	autoOpenOnStartup: true,
 };
 
 export class HomeDashboardSettingTab extends PluginSettingTab {
@@ -67,6 +68,16 @@ export class HomeDashboardSettingTab extends PluginSettingTab {
 	}
 
 	private renderGeneralSettings(contentEl: HTMLElement): void {
+		new Setting(contentEl)
+			.setName("自动打开 Dashboard")
+			.setDesc("每次启动 Obsidian 或每天首次切回时自动进入 Dashboard。")
+			.addToggle((toggle) =>
+				toggle.setValue(this.plugin.settings.autoOpenOnStartup).onChange(async (value) => {
+					this.plugin.settings.autoOpenOnStartup = value;
+					await this.plugin.saveSettings();
+				})
+			);
+
 		new Setting(contentEl)
 			.setName("主页标题")
 			.setDesc("自定义主页视图的标题")

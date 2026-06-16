@@ -88,16 +88,16 @@ export function renderFieldDistribution(
 	}
 
 	if (weeklyAuthors.length === 0) {
-		createColumn(weeklyColumns, "能力者").createDiv("kd-field-empty").setText("抢占首位");
+		createColumn(weeklyColumns, "作者").createDiv("kd-field-empty").setText("抢占首位");
 	} else {
-		renderLollipopChart(createColumn(weeklyColumns, "能力者"), weeklyAuthors, app, openNote);
+		renderLollipopChart(createColumn(weeklyColumns, "作者"), weeklyAuthors, app, openNote, undefined, true);
 	}
 
 	const totalPanel = createPanel(wrapper, "历史全局");
 	totalPanel.addClass("kd-field-panel--cumulative");
 
 	const totalLayout = totalPanel.createDiv("kd-field-panel-cumulative");
-	const cumulativeRow = totalLayout.createDiv("kd-cumulative-row");
+	const cumulativeRow = totalLayout.createDiv("kd-field-panel-columns");
 
 	renderBubbleDistribution(
 		createCumulativeColumn(cumulativeRow, "项目", "kd-cumulative-bubble"),
@@ -116,10 +116,12 @@ export function renderFieldDistribution(
 		openNote
 	);
 	renderLollipopChart(
-		createCumulativeColumn(cumulativeRow, "能力者", "kd-cumulative-lollipop"),
+		createColumn(cumulativeRow, "作者"),
 		authorStats.map((s) => ({ key: s.key, count: s.total, items: s.totalItems })),
 		app,
-		openNote
+		openNote,
+		undefined,
+		true
 	);
 }
 
@@ -146,7 +148,8 @@ function renderLollipopChart(
 	entries: DistributionEntry[],
 	app: App,
 	openNote: (file: NoteEntry["file"]) => void,
-	columnTitle?: string
+	columnTitle?: string,
+	showCrownForFirst?: boolean
 ): void {
 	if (entries.length === 0) {
 		container.createDiv("kd-field-empty").setText("暂无数据");
@@ -163,7 +166,7 @@ function renderLollipopChart(
 		const row = chart.createDiv("kd-lollipop-row");
 
 		const label = row.createDiv("kd-lollipop-label");
-		label.setText(entry.key);
+		label.setText(showCrownForFirst && i === 0 ? `${entry.key} 👑` : entry.key);
 
 		const track = row.createDiv("kd-lollipop-track");
 
@@ -177,7 +180,7 @@ function renderLollipopChart(
 		value.setText(String(entry.count));
 
 		row.addEventListener("click", () => {
-			showFieldModal(`${columnTitle || "能力者"} · ${entry.key}`, entry.items, app, openNote);
+			showFieldModal(`${columnTitle || "作者"} · ${entry.key}`, entry.items, app, openNote);
 		});
 	}
 

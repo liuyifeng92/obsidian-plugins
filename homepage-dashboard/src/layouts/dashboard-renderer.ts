@@ -41,7 +41,7 @@ export class DashboardRenderer implements LayoutRenderer {
 
 		const dateFieldsWithData = allFields.filter((field) => dateFields.includes(field));
 		if (dateFieldsWithData.length > 0) {
-			const section = sectionsWrapper.createDiv("home-dashboard-section");
+			const section = sectionsWrapper.createDiv("home-dashboard-section kd-heatmap-section");
 			renderHeatmap(container, section, result, dateFieldsWithData, searchKeyword, openNote, app, plugin.settings.heatmapColor);
 		}
 
@@ -127,25 +127,25 @@ function renderHeatmap(
 
 	const controls = header.createDiv("home-dashboard-heatmap-controls");
 
-	const authorSelect = controls.createEl("select", { cls: "home-dashboard-year-select" });
-	authorSelect.createEl("option", { text: "全员", value: "" });
-	for (const name of authorNames) {
-		const option = authorSelect.createEl("option", { text: name, value: name });
-		if (name === selectedAuthor) {
-			option.selected = true;
-		}
-	}
-
-	const yearSelect = controls.createEl("select", { cls: "home-dashboard-year-select" });
+	const yearOptions: { value: string; label: string }[] = [];
 	for (let y = currentYear - 5; y <= currentYear + 1; y++) {
-		const option = yearSelect.createEl("option", { text: `${y}年`, value: String(y) });
-		if (y === selectedYear) {
-			option.selected = true;
-		}
+		yearOptions.push({ value: String(y), label: `${y}年` });
 	}
+	renderDropdown(controls, "home-dashboard-year-menu", yearOptions, String(selectedYear), (value) => {
+		selectedYear = Number(value);
+		stateContainer.dataset.heatmapYear = value;
+		renderContent();
+	});
 
-	authorSelect.value = selectedAuthor;
-	yearSelect.value = String(selectedYear);
+	const authorOptions: { value: string; label: string }[] = [{ value: "", label: "全员" }];
+	for (const name of authorNames) {
+		authorOptions.push({ value: name, label: name });
+	}
+	renderDropdown(controls, "home-dashboard-author-menu", authorOptions, selectedAuthor, (value) => {
+		selectedAuthor = value;
+		stateContainer.dataset.heatmapAuthor = selectedAuthor;
+		renderContent();
+	});
 
 	const heatmapContainer = container.createDiv("home-dashboard-heatmap-container");
 
@@ -261,21 +261,86 @@ function renderHeatmap(
 		}
 	};
 
-	authorSelect.addEventListener("change", (event) => {
-		const target = event.currentTarget as HTMLSelectElement;
-		selectedAuthor = target.value;
-		stateContainer.dataset.heatmapAuthor = selectedAuthor;
-		requestAnimationFrame(() => renderContent());
-	});
-
-	yearSelect.addEventListener("change", (event) => {
-		const target = event.currentTarget as HTMLSelectElement;
-		selectedYear = Number(target.value);
-		stateContainer.dataset.heatmapYear = String(selectedYear);
-		requestAnimationFrame(() => renderContent());
-	});
-
 	renderContent();
+}
+
+function renderDropdown(
+	container: HTMLElement,
+	menuClass: string,
+	options: { value: string; label: string }[],
+	selectedValue: string,
+	onChange: (value: string) => void
+): void {
+	// 若旧菜单仍挂着全局关闭监听，先清理掉，避免泄漏
+	const oldMenu = document.querySelector(`.${menuClass}`) as (HTMLElement & { closeMenu?: () => void }) | null;
+	if (oldMenu?.closeMenu) {
+		oldMenu.closeMenu();
+	}
+
+	const selectedOption = options.find((option) => option.value === selectedValue) ?? options[0];
+	const wrapper = container.createDiv("home-dashboard-dropdown");
+	const trigger = wrapper.createEl("button", {
+		cls: "home-dashboard-dropdown-trigger",
+		text: selectedOption.label,
+		type: "button",
+	});
+	const menu = wrapper.createDiv(`home-dashboard-dropdown-menu ${menuClass}`);
+	menu.style.display = "none";
+
+	const addOption = (value: string, label: string) => {
+		const item = menu.createDiv("home-dashboard-dropdown-item");
+		item.setText(label);
+		if (value === selectedValue) {
+			item.addClass("is-selected");
+		}
+		item.addEventListener("click", (e) => {
+			e.stopPropagation();
+			e.preventDefault();
+			onChange(value);
+			trigger.setText(label);
+			menu.querySelectorAll(".home-dashboard-dropdown-item").forEach((el) => el.removeClass("is-selected"));
+			item.addClass("is-selected");
+			closeMenu();
+		});
+	};
+
+	for (const option of options) {
+		addOption(option.value, option.label);
+	}
+
+	let closeHandler: ((e: MouseEvent) => void) | null = null;
+
+	const openMenu = () => {
+		menu.style.display = "block";
+		// 下一帧才注册 document 关闭监听，避免打开菜单的这次 click 立即触发关闭
+		requestAnimationFrame(() => {
+			closeHandler = (e: MouseEvent) => {
+				if (!wrapper.contains(e.target as Node)) {
+					closeMenu();
+				}
+			};
+			document.addEventListener("click", closeHandler, { capture: true });
+		});
+	};
+
+	const closeMenu = () => {
+		menu.style.display = "none";
+		if (closeHandler) {
+			document.removeEventListener("click", closeHandler, { capture: true });
+			closeHandler = null;
+		}
+	};
+
+	(menu as HTMLElement & { closeMenu?: () => void }).closeMenu = closeMenu;
+
+	trigger.addEventListener("click", (e) => {
+		e.stopPropagation();
+		if (menu.style.display === "block") {
+			closeMenu();
+		} else {
+			openMenu();
+		}
+	});
 }
 
 function getHeatmapLevel(count: number): number {

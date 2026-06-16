@@ -42,6 +42,7 @@ export interface HomeDashboardSettings {
 	autoUpdate: boolean;
 	heatmapColor: string;
 	fieldDistributionColor: string;
+	autoOpenOnStartup: boolean;
 }
 
 export interface HomeDashboardPluginLike {

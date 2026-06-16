@@ -128,6 +128,7 @@
 	font-weight: 900;
 	color: var(--kd-ink);
 	margin: 10px 0 0;
+	padding-left: 28px;
 	line-height: 1.3;
 	font-family: "PingFang SC", "SF Pro Display", "Helvetica Neue", sans-serif;
 	letter-spacing: -0.02em;
@@ -247,6 +248,11 @@
 	box-sizing: border-box;
 }
 
+.kd-heatmap-section,
+.kd-field-section {
+	border-color: transparent;
+}
+
 .home-dashboard-sections-wrapper {
 	display: flex;
 	flex-direction: column;
@@ -339,6 +345,59 @@
 .home-dashboard-year-select:focus {
 	outline: none;
 	box-shadow: 0 0 0 2px var(--kd-brand-red);
+}
+
+.home-dashboard-dropdown {
+	position: relative;
+	display: inline-block;
+}
+
+.home-dashboard-dropdown-trigger {
+	padding: 8px 14px;
+	border: 2px solid var(--kd-ink);
+	border-radius: 0;
+	background-color: var(--kd-ink);
+	color: var(--kd-paper);
+	font-size: 0.72rem;
+	font-weight: 800;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	text-align: center;
+	cursor: pointer;
+	transition: opacity 0.15s ease;
+}
+
+.home-dashboard-dropdown-trigger:hover {
+	opacity: 0.6;
+}
+
+.home-dashboard-dropdown-menu {
+	position: absolute;
+	top: 100%;
+	left: 0;
+	z-index: 1000;
+	min-width: 120px;
+	max-height: 300px;
+	overflow-y: auto;
+	background-color: var(--kd-paper);
+	border: 2px solid var(--kd-ink);
+	box-shadow: 4px 4px 0 var(--kd-ink);
+	margin-top: 4px;
+}
+
+.home-dashboard-dropdown-item {
+	padding: 8px 14px;
+	font-size: 0.72rem;
+	font-weight: 700;
+	color: var(--kd-ink);
+	cursor: pointer;
+	white-space: nowrap;
+}
+
+.home-dashboard-dropdown-item:hover,
+.home-dashboard-dropdown-item.is-selected {
+	background-color: var(--kd-ink);
+	color: var(--kd-paper);
 }
 
 .home-dashboard-field-count {
@@ -1041,12 +1100,6 @@
 	color: var(--kd-ink);
 }
 
-.kd-cumulative-lollipop .kd-lollipop-value {
-	text-align: left;
-	font-size: 0.68rem;
-	font-weight: 900;
-}
-
 /* ---------------------------------------------------------
    12. Mini stat cards
    --------------------------------------------------------- */
@@ -1109,6 +1162,7 @@
 	width: 100%;
 	height: 20px;
 	display: flex;
+	gap: 2px;
 	border-radius: 0;
 	overflow: hidden;
 	background-color: var(--kd-stone);
@@ -1762,6 +1816,10 @@
 	.home-dashboard-section,
 	.kd-field-section {
 		padding: 18px;
+	}
+
+	.kd-dashboard-slogan {
+		padding-left: 18px;
 	}
 
 	.kd-metric-item,

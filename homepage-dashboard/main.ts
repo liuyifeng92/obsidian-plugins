@@ -10,6 +10,7 @@ export default class HomeDashboardPlugin extends Plugin {
 	private autoUpdateCheckTimer: number | null = null;
 	private pendingAutoReloadTimer: number | null = null;
 	private pendingAutoReloadVersion = "";
+	private lastFocusDate: string = new Date().toDateString();
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
@@ -19,6 +20,24 @@ export default class HomeDashboardPlugin extends Plugin {
 			VIEW_TYPE_HOME_DASHBOARD,
 			(leaf) => new HomeDashboardView(leaf, this)
 		);
+
+		// 启动时自动打开 Dashboard
+		this.app.workspace.onLayoutReady(() => {
+			if (this.settings.autoOpenOnStartup) {
+				void this.activateDashboardView();
+			}
+		});
+
+		// 窗口切回前台时，跨天则自动打开 Dashboard
+		this.registerDomEvent(window, "focus", () => {
+			const today = new Date().toDateString();
+			if (today !== this.lastFocusDate) {
+				this.lastFocusDate = today;
+				if (this.settings.autoOpenOnStartup) {
+					void this.activateDashboardView();
+				}
+			}
+		});
 
 		// 打开主页命令
 		this.addCommand({
@@ -100,6 +119,17 @@ export default class HomeDashboardPlugin extends Plugin {
 			type: VIEW_TYPE_HOME_DASHBOARD,
 			active: true,
 		});
+	}
+
+	async activateDashboardView(): Promise<void> {
+		const existing = this.app.workspace.getLeavesOfType(VIEW_TYPE_HOME_DASHBOARD);
+		if (existing.length > 0) {
+			this.app.workspace.revealLeaf(existing[0]);
+			return;
+		}
+
+		const leaf = this.app.workspace.getLeaf(false);
+		await leaf.setViewState({ type: VIEW_TYPE_HOME_DASHBOARD, active: true });
 	}
 
 	async checkForUpdate(): Promise<{ hasUpdate: boolean; version: string; error?: string }> {
