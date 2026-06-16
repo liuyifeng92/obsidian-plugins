@@ -53,6 +53,14 @@ export function renderHtmlPreview(
       try {
         return await app.vault.adapter.read(filePath);
       } catch (error) {
+        if (filePath.startsWith(".html-embeds/")) {
+          const fallbackPath = filePath.replace(/^\.html-embeds\//, "html-embeds/");
+          try {
+            return await app.vault.adapter.read(fallbackPath);
+          } catch {
+            throw new Error(`HTML 文件未找到：${filePath}`);
+          }
+        }
         throw new Error(`HTML 文件未找到：${filePath}`);
       }
     };

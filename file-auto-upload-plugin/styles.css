@@ -190,3 +190,9 @@
   background-color: var(--background-modifier-error);
   color: var(--text-on-accent);
 }
+
+/* Hide html-embeds folder from Obsidian sidebar */
+.nav-folder-title[data-path="html-embeds"],
+.nav-folder-title[data-path="html-embeds"] + .nav-folder-children {
+  display: none !important;
+}

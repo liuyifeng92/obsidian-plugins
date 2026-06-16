@@ -687,14 +687,14 @@ export default class imageAutoUploadPlugin extends Plugin {
   }
 
   private async ensureHtmlEmbedsFolder(): Promise<void> {
-    const folderPath = ".html-embeds";
+    const folderPath = "html-embeds";
     if (!(await this.app.vault.adapter.exists(folderPath))) {
       await this.app.vault.adapter.mkdir(folderPath);
     }
   }
 
   private getUniqueHtmlEmbedPath(fileName: string): string {
-    const basePath = ".html-embeds/";
+    const basePath = "html-embeds/";
     let targetPath = `${basePath}${fileName}`;
 
     if (!this.app.vault.getAbstractFileByPath(targetPath)) {
