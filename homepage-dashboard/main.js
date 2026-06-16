@@ -1291,81 +1291,85 @@ function renderTreemap(container, entries, app, openNote) {
     return;
   }
   const sorted = entries.filter((e) => e.count > 0).slice().sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
-  const total = sorted.reduce((sum, e) => sum + e.count, 0);
-  const width = 100;
-  const height = 100;
-  const rects = buildTreemapRects(sorted, total, 0, 0, width, height, 0);
-  const wrapper = container.createDiv("kd-treemap");
-  wrapper.style.position = "relative";
-  wrapper.style.width = "100%";
-  wrapper.style.minHeight = "260px";
-  for (let i = 0; i < rects.length; i++) {
-    const rect = rects[i];
-    const cell = wrapper.createDiv("kd-treemap-cell");
-    cell.style.position = "absolute";
-    cell.style.left = `${rect.x}%`;
-    cell.style.top = `${rect.y}%`;
-    cell.style.width = `${rect.w}%`;
-    cell.style.height = `${rect.h}%`;
-    const color = getTreemapRankColor(i, currentBaseRed);
-    cell.style.backgroundColor = color;
-    cell.style.overflow = "hidden";
-    cell.style.display = "flex";
-    cell.style.alignItems = "flex-start";
-    cell.style.justifyContent = "flex-start";
-    cell.style.padding = "6px 8px";
-    cell.style.boxSizing = "border-box";
-    const label = cell.createDiv("kd-treemap-label");
-    label.style.wordBreak = "break-word";
-    label.style.lineHeight = "1.25";
-    const showName = rect.w >= 10 && rect.h >= 8;
-    if (showName) {
-      label.setText(rect.entry.key);
+  if (sorted.length === 0) {
+    container.createDiv("kd-field-empty").setText("\u6682\u65E0\u6570\u636E");
+    return;
+  }
+  const layoutEntries = [];
+  let otherEntry;
+  for (const entry of sorted) {
+    if (entry.key === "\u5176\u4ED6") {
+      otherEntry = entry;
     } else {
-      label.style.display = "none";
+      layoutEntries.push(entry);
     }
-    (0, import_obsidian2.setTooltip)(cell, `${rect.entry.key}: ${rect.entry.count}`, { placement: "top", delay: 0 });
-    cell.addEventListener("click", () => {
-      showFieldModal(`\u7C7B\u578B \xB7 ${rect.entry.key}`, rect.entry.items, app, openNote);
+  }
+  if (otherEntry) {
+    layoutEntries.push({
+      ...otherEntry,
+      count: 10,
+      actualCount: otherEntry.count
     });
   }
+  const total = layoutEntries.reduce((sum, e) => sum + e.count, 0);
+  const wrapper = container.createDiv("kd-treemap");
+  renderTreemapGroup(wrapper, layoutEntries, total, 0, total, { w: 100, h: 100 }, true, app, openNote);
 }
-function buildTreemapRects(entries, total, x, y, w, h, colorIndex) {
-  if (entries.length === 0)
-    return [];
-  if (entries.length === 1) {
-    return [{ x, y, w, h, entry: entries[0] }];
+var TREEMAP_ASPECT_LIMIT = 1.5;
+function renderTreemapGroup(container, items, groupTotal, colorStart, globalTotal, rect, preferredHorizontal, app, openNote) {
+  if (items.length === 1) {
+    renderTreemapCell(container, items[0], colorStart, globalTotal, app, openNote);
+    return;
   }
-  let bestIndex = 1;
-  let bestDiff = Infinity;
-  let runningSum = 0;
-  let bestSum = 0;
-  for (let i = 0; i < entries.length - 1; i++) {
-    runningSum += entries[i].count;
-    const diff = Math.abs(runningSum / total - 0.5);
-    if (diff < bestDiff) {
-      bestDiff = diff;
-      bestIndex = i + 1;
-      bestSum = runningSum;
-    }
+  const mid = Math.ceil(items.length / 2);
+  const groupA = items.slice(0, mid);
+  const groupB = items.slice(mid);
+  const totalA = groupA.reduce((sum, item) => sum + item.count, 0);
+  const totalB = groupB.reduce((sum, item) => sum + item.count, 0);
+  const aspect = rect.w / rect.h;
+  let horizontal = preferredHorizontal;
+  if (aspect > TREEMAP_ASPECT_LIMIT) {
+    horizontal = true;
+  } else if (aspect < 1 / TREEMAP_ASPECT_LIMIT) {
+    horizontal = false;
   }
-  const group1 = entries.slice(0, bestIndex);
-  const group2 = entries.slice(bestIndex);
-  const sum1 = bestSum;
-  const sum2 = total - sum1;
-  if (w >= h) {
-    const w1 = w * (sum1 / total);
-    return [
-      ...buildTreemapRects(group1, sum1, x, y, w1, h, colorIndex),
-      ...buildTreemapRects(group2, sum2, x + w1, y, w - w1, h, colorIndex + group1.length)
-    ];
+  container.style.flexDirection = horizontal ? "row" : "column";
+  const ratioA = groupTotal === 0 ? 0 : totalA / groupTotal;
+  let rectA;
+  let rectB;
+  if (horizontal) {
+    rectA = { w: rect.w * ratioA, h: rect.h };
+    rectB = { w: rect.w * (1 - ratioA), h: rect.h };
   } else {
-    const h1 = h * (sum1 / total);
-    return [
-      ...buildTreemapRects(group1, sum1, x, y, w, h1, colorIndex),
-      ...buildTreemapRects(group2, sum2, x, y + h1, w, h - h1, colorIndex + group1.length)
-    ];
+    rectA = { w: rect.w, h: rect.h * ratioA };
+    rectB = { w: rect.w, h: rect.h * (1 - ratioA) };
   }
+  const elA = container.createDiv("kd-treemap-group");
+  elA.style.flex = String(totalA);
+  renderTreemapGroup(elA, groupA, totalA, colorStart, globalTotal, rectA, !horizontal, app, openNote);
+  const elB = container.createDiv("kd-treemap-group");
+  elB.style.flex = String(totalB);
+  renderTreemapGroup(elB, groupB, totalB, colorStart + groupA.length, globalTotal, rectB, !horizontal, app, openNote);
+}
+function renderTreemapCell(container, entry, colorIndex, globalTotal, app, openNote) {
+  var _a;
+  const cell = container.createDiv("kd-treemap-cell");
+  cell.style.backgroundColor = getTreemapRankColor(colorIndex, currentBaseRed);
+  const label = cell.createDiv("kd-treemap-label");
+  label.style.wordBreak = "break-word";
+  label.style.lineHeight = "1.25";
+  const share = globalTotal === 0 ? 0 : entry.count / globalTotal * 100;
+  if (entry.key === "\u5176\u4ED6" || share >= 2) {
+    label.setText(entry.key);
+  } else {
+    label.style.display = "none";
+  }
+  const displayCount = (_a = entry.actualCount) != null ? _a : entry.count;
+  (0, import_obsidian2.setTooltip)(cell, `${entry.key}: ${displayCount}`, { placement: "top", delay: 0 });
+  cell.addEventListener("click", () => {
+    showFieldModal(`\u7C7B\u578B \xB7 ${entry.key}`, entry.items, app, openNote);
+  });
+  return cell;
 }
 function computeFieldStats(groups, app) {
   const { start, end } = getCurrentWeekRange();

@@ -14,6 +14,7 @@ interface DistributionEntry {
 	key: string;
 	count: number;
 	items: NoteEntry[];
+	actualCount?: number;
 }
 
 function mergeSmallEntries(entries: DistributionEntry[], threshold: number, otherLabel: string): DistributionEntry[] {
@@ -414,14 +415,6 @@ function renderBubbleDistribution(
 	});
 }
 
-interface TreemapRect {
-	x: number;
-	y: number;
-	w: number;
-	h: number;
-	entry: DistributionEntry;
-}
-
 function renderTreemap(
 	container: HTMLElement,
 	entries: DistributionEntry[],
@@ -437,101 +430,125 @@ function renderTreemap(
 		.filter((e) => e.count > 0)
 		.slice()
 		.sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
-	const total = sorted.reduce((sum, e) => sum + e.count, 0);
-	const width = 100;
-	const height = 100;
-	const rects = buildTreemapRects(sorted, total, 0, 0, width, height, 0);
 
-	const wrapper = container.createDiv("kd-treemap");
-	wrapper.style.position = "relative";
-	wrapper.style.width = "100%";
-	wrapper.style.minHeight = "260px";
+	if (sorted.length === 0) {
+		container.createDiv("kd-field-empty").setText("暂无数据");
+		return;
+	}
 
-	for (let i = 0; i < rects.length; i++) {
-		const rect = rects[i];
-		const cell = wrapper.createDiv("kd-treemap-cell");
-		cell.style.position = "absolute";
-		cell.style.left = `${rect.x}%`;
-		cell.style.top = `${rect.y}%`;
-		cell.style.width = `${rect.w}%`;
-		cell.style.height = `${rect.h}%`;
-		// 按面积排名使用红色深浅梯度（累计沉淀类型层级较多，使用 10% 档位）
-		const color = getTreemapRankColor(i, currentBaseRed);
-		cell.style.backgroundColor = color;
-		cell.style.overflow = "hidden";
-		cell.style.display = "flex";
-		cell.style.alignItems = "flex-start";
-		cell.style.justifyContent = "flex-start";
-		cell.style.padding = "6px 8px";
-		cell.style.boxSizing = "border-box";
+	const layoutEntries: DistributionEntry[] = [];
+	let otherEntry: DistributionEntry | undefined;
 
-		const label = cell.createDiv("kd-treemap-label");
-		label.style.wordBreak = "break-word";
-		label.style.lineHeight = "1.25";
-
-		// 默认只显示类型名称，不显示数量；数量通过 hover tooltip 展示
-		const showName = rect.w >= 10 && rect.h >= 8;
-		if (showName) {
-			label.setText(rect.entry.key);
+	for (const entry of sorted) {
+		if (entry.key === "其他") {
+			otherEntry = entry;
 		} else {
-			label.style.display = "none";
+			layoutEntries.push(entry);
 		}
+	}
 
-		setTooltip(cell, `${rect.entry.key}: ${rect.entry.count}`, { placement: "top", delay: 0 });
-
-		cell.addEventListener("click", () => {
-			showFieldModal(`类型 · ${rect.entry.key}`, rect.entry.items, app, openNote);
+	if (otherEntry) {
+		layoutEntries.push({
+			...otherEntry,
+			count: 10,
+			actualCount: otherEntry.count,
 		});
 	}
+
+	const total = layoutEntries.reduce((sum, e) => sum + e.count, 0);
+	const wrapper = container.createDiv("kd-treemap");
+	renderTreemapGroup(wrapper, layoutEntries, total, 0, total, { w: 100, h: 100 }, true, app, openNote);
 }
 
-function buildTreemapRects(
-	entries: DistributionEntry[],
-	total: number,
-	x: number,
-	y: number,
-	w: number,
-	h: number,
-	colorIndex: number
-): TreemapRect[] {
-	if (entries.length === 0) return [];
-	if (entries.length === 1) {
-		return [{ x, y, w, h, entry: entries[0] }];
+interface TreemapRect {
+	w: number;
+	h: number;
+}
+
+const TREEMAP_ASPECT_LIMIT = 1.5;
+
+function renderTreemapGroup(
+	container: HTMLElement,
+	items: DistributionEntry[],
+	groupTotal: number,
+	colorStart: number,
+	globalTotal: number,
+	rect: TreemapRect,
+	preferredHorizontal: boolean,
+	app: App,
+	openNote: (file: NoteEntry["file"]) => void
+): void {
+	if (items.length === 1) {
+		renderTreemapCell(container, items[0], colorStart, globalTotal, app, openNote);
+		return;
 	}
 
-	let bestIndex = 1;
-	let bestDiff = Infinity;
-	let runningSum = 0;
-	let bestSum = 0;
+	const mid = Math.ceil(items.length / 2);
+	const groupA = items.slice(0, mid);
+	const groupB = items.slice(mid);
+	const totalA = groupA.reduce((sum, item) => sum + item.count, 0);
+	const totalB = groupB.reduce((sum, item) => sum + item.count, 0);
 
-	for (let i = 0; i < entries.length - 1; i++) {
-		runningSum += entries[i].count;
-		const diff = Math.abs(runningSum / total - 0.5);
-		if (diff < bestDiff) {
-			bestDiff = diff;
-			bestIndex = i + 1;
-			bestSum = runningSum;
-		}
+	const aspect = rect.w / rect.h;
+	let horizontal = preferredHorizontal;
+	if (aspect > TREEMAP_ASPECT_LIMIT) {
+		horizontal = true;
+	} else if (aspect < 1 / TREEMAP_ASPECT_LIMIT) {
+		horizontal = false;
 	}
 
-	const group1 = entries.slice(0, bestIndex);
-	const group2 = entries.slice(bestIndex);
-	const sum1 = bestSum;
-	const sum2 = total - sum1;
+	container.style.flexDirection = horizontal ? "row" : "column";
 
-	if (w >= h) {
-		const w1 = w * (sum1 / total);
-		return [
-			...buildTreemapRects(group1, sum1, x, y, w1, h, colorIndex),
-			...buildTreemapRects(group2, sum2, x + w1, y, w - w1, h, colorIndex + group1.length),
-		];
+	const ratioA = groupTotal === 0 ? 0 : totalA / groupTotal;
+	let rectA: TreemapRect;
+	let rectB: TreemapRect;
+	if (horizontal) {
+		rectA = { w: rect.w * ratioA, h: rect.h };
+		rectB = { w: rect.w * (1 - ratioA), h: rect.h };
 	} else {
-		const h1 = h * (sum1 / total);
-		return [
-			...buildTreemapRects(group1, sum1, x, y, w, h1, colorIndex),
-			...buildTreemapRects(group2, sum2, x, y + h1, w, h - h1, colorIndex + group1.length),
-		];
+		rectA = { w: rect.w, h: rect.h * ratioA };
+		rectB = { w: rect.w, h: rect.h * (1 - ratioA) };
 	}
+
+	const elA = container.createDiv("kd-treemap-group");
+	elA.style.flex = String(totalA);
+	renderTreemapGroup(elA, groupA, totalA, colorStart, globalTotal, rectA, !horizontal, app, openNote);
+
+	const elB = container.createDiv("kd-treemap-group");
+	elB.style.flex = String(totalB);
+	renderTreemapGroup(elB, groupB, totalB, colorStart + groupA.length, globalTotal, rectB, !horizontal, app, openNote);
+}
+
+function renderTreemapCell(
+	container: HTMLElement,
+	entry: DistributionEntry,
+	colorIndex: number,
+	globalTotal: number,
+	app: App,
+	openNote: (file: NoteEntry["file"]) => void
+): HTMLElement {
+	const cell = container.createDiv("kd-treemap-cell");
+	cell.style.backgroundColor = getTreemapRankColor(colorIndex, currentBaseRed);
+
+	const label = cell.createDiv("kd-treemap-label");
+	label.style.wordBreak = "break-word";
+	label.style.lineHeight = "1.25";
+
+	const share = globalTotal === 0 ? 0 : (entry.count / globalTotal) * 100;
+	if (entry.key === "其他" || share >= 2) {
+		label.setText(entry.key);
+	} else {
+		label.style.display = "none";
+	}
+
+	const displayCount = entry.actualCount ?? entry.count;
+	setTooltip(cell, `${entry.key}: ${displayCount}`, { placement: "top", delay: 0 });
+
+	cell.addEventListener("click", () => {
+		showFieldModal(`类型 · ${entry.key}`, entry.items, app, openNote);
+	});
+
+	return cell;
 }
 
 function computeFieldStats(groups: Record<string, NoteEntry[]>, app: App): FieldStat[] {
