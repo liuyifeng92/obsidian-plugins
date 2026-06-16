@@ -43,6 +43,8 @@ export interface HomeDashboardSettings {
 	heatmapColor: string;
 	fieldDistributionColor: string;
 	autoOpenOnStartup: boolean;
+	excludedProjects: string[];
+	excludedTypes: string[];
 }
 
 export interface HomeDashboardPluginLike {

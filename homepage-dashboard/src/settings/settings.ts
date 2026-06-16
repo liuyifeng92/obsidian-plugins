@@ -14,6 +14,8 @@ export const DEFAULT_SETTINGS: HomeDashboardSettings = {
 	heatmapColor: "#28B80F",
 	fieldDistributionColor: "#B01111",
 	autoOpenOnStartup: true,
+	excludedProjects: [],
+	excludedTypes: ["git日报"],
 };
 
 export class HomeDashboardSettingTab extends PluginSettingTab {
@@ -154,6 +156,34 @@ export class HomeDashboardSettingTab extends PluginSettingTab {
 					.setValue(this.plugin.settings.dateFields.join("\n"))
 					.onChange(async (value) => {
 						this.plugin.settings.dateFields = parseLineList(value);
+						await this.plugin.saveSettings();
+					});
+				text.inputEl.rows = 3;
+			});
+
+		new Setting(contentEl)
+			.setName("排除项目")
+			.setDesc("整体计算时排除这些项目对应的文档。每行一个项目名称。")
+			.addTextArea((text) => {
+				text
+					.setPlaceholder("例如：归档\\n临时")
+					.setValue(this.plugin.settings.excludedProjects.join("\n"))
+					.onChange(async (value) => {
+						this.plugin.settings.excludedProjects = parseLineList(value);
+						await this.plugin.saveSettings();
+					});
+				text.inputEl.rows = 3;
+			});
+
+		new Setting(contentEl)
+			.setName("排除类型")
+			.setDesc("整体计算时排除这些类型的文档。每行一个类型名称。")
+			.addTextArea((text) => {
+				text
+					.setPlaceholder("例如：git日报")
+					.setValue(this.plugin.settings.excludedTypes.join("\n"))
+					.onChange(async (value) => {
+						this.plugin.settings.excludedTypes = parseLineList(value);
 						await this.plugin.saveSettings();
 					});
 				text.inputEl.rows = 3;

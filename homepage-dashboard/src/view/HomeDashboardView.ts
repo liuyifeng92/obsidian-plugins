@@ -15,7 +15,13 @@ export class HomeDashboardView extends ItemView {
 	constructor(leaf: WorkspaceLeaf, plugin: HomeDashboardPluginLike) {
 		super(leaf);
 		this.plugin = plugin;
-		this.aggregator = new NoteAggregator(this.app, plugin.settings.aggregatedFields);
+		this.aggregator = new NoteAggregator(
+			this.app,
+			plugin.settings.aggregatedFields,
+			plugin.settings.dateFields,
+			plugin.settings.excludedProjects,
+			plugin.settings.excludedTypes
+		);
 		this.currentLayout = "dashboard";
 	}
 
@@ -55,7 +61,13 @@ export class HomeDashboardView extends ItemView {
 		loadingEl.setText("正在汇总数据...");
 
 		try {
-			this.aggregator = new NoteAggregator(this.app, this.plugin.settings.aggregatedFields, this.plugin.settings.dateFields);
+			this.aggregator = new NoteAggregator(
+				this.app,
+				this.plugin.settings.aggregatedFields,
+				this.plugin.settings.dateFields,
+				this.plugin.settings.excludedProjects,
+				this.plugin.settings.excludedTypes
+			);
 			const result = await this.aggregator.aggregate();
 
 			loadingEl.remove();

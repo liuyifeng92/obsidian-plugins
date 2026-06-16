@@ -7,12 +7,22 @@ export class NoteAggregator {
 	app: App;
 	fields: string[];
 	dateFields: string[];
+	excludedProjects: string[];
+	excludedTypes: string[];
 
-	constructor(app: App, fields: string[], dateFields: string[] = []) {
+	constructor(
+		app: App,
+		fields: string[],
+		dateFields: string[] = [],
+		excludedProjects: string[] = [],
+		excludedTypes: string[] = []
+	) {
 		this.app = app;
 		// Dashboard 视图固定需要「作者」「项目」「类型」字段
 		this.fields = Array.from(new Set([...fields, "作者", "项目", "类型"]));
 		this.dateFields = dateFields;
+		this.excludedProjects = excludedProjects.map((v) => v.trim().toLowerCase()).filter(Boolean);
+		this.excludedTypes = excludedTypes.map((v) => v.trim().toLowerCase()).filter(Boolean);
 	}
 
 	async aggregate(): Promise<AggregatedResult> {
@@ -26,6 +36,10 @@ export class NoteAggregator {
 		for (const file of files) {
 			const cache = this.app.metadataCache.getFileCache(file);
 			if (!cache || !cache.frontmatter) {
+				continue;
+			}
+
+			if (this.shouldExclude(cache.frontmatter)) {
 				continue;
 			}
 
@@ -66,6 +80,24 @@ export class NoteAggregator {
 		}
 
 		return result;
+	}
+
+	private shouldExclude(frontmatter: Record<string, unknown>): boolean {
+		if (this.excludedProjects.length > 0) {
+			const projectValues = this.normalizeValue(frontmatter["项目"]).map((v) => v.toLowerCase());
+			if (projectValues.some((value) => this.excludedProjects.includes(value))) {
+				return true;
+			}
+		}
+
+		if (this.excludedTypes.length > 0) {
+			const typeValues = this.normalizeValue(frontmatter["类型"]).map((v) => v.toLowerCase());
+			if (typeValues.some((value) => this.excludedTypes.includes(value))) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	private normalizeValue(raw: unknown): string[] {

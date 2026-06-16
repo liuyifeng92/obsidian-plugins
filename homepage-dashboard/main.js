@@ -41,7 +41,9 @@ var DEFAULT_SETTINGS = {
   autoUpdate: true,
   heatmapColor: "#28B80F",
   fieldDistributionColor: "#B01111",
-  autoOpenOnStartup: true
+  autoOpenOnStartup: true,
+  excludedProjects: [],
+  excludedTypes: ["git\u65E5\u62A5"]
 };
 var HomeDashboardSettingTab = class extends import_obsidian.PluginSettingTab {
   constructor(app, plugin) {
@@ -131,6 +133,20 @@ var HomeDashboardSettingTab = class extends import_obsidian.PluginSettingTab {
     new import_obsidian.Setting(contentEl).setName("\u65E5\u671F\u5B57\u6BB5").setDesc("\u54EA\u4E9B\u5B57\u6BB5\u9700\u8981\u6309\u5E74/\u6708\u805A\u5408\uFF1F\u6BCF\u884C\u4E00\u4E2A\u5B57\u6BB5\u540D\uFF08\u901A\u5E38\u5305\u542B date\uFF09").addTextArea((text) => {
       text.setPlaceholder("date").setValue(this.plugin.settings.dateFields.join("\n")).onChange(async (value) => {
         this.plugin.settings.dateFields = parseLineList(value);
+        await this.plugin.saveSettings();
+      });
+      text.inputEl.rows = 3;
+    });
+    new import_obsidian.Setting(contentEl).setName("\u6392\u9664\u9879\u76EE").setDesc("\u6574\u4F53\u8BA1\u7B97\u65F6\u6392\u9664\u8FD9\u4E9B\u9879\u76EE\u5BF9\u5E94\u7684\u6587\u6863\u3002\u6BCF\u884C\u4E00\u4E2A\u9879\u76EE\u540D\u79F0\u3002").addTextArea((text) => {
+      text.setPlaceholder("\u4F8B\u5982\uFF1A\u5F52\u6863\\n\u4E34\u65F6").setValue(this.plugin.settings.excludedProjects.join("\n")).onChange(async (value) => {
+        this.plugin.settings.excludedProjects = parseLineList(value);
+        await this.plugin.saveSettings();
+      });
+      text.inputEl.rows = 3;
+    });
+    new import_obsidian.Setting(contentEl).setName("\u6392\u9664\u7C7B\u578B").setDesc("\u6574\u4F53\u8BA1\u7B97\u65F6\u6392\u9664\u8FD9\u4E9B\u7C7B\u578B\u7684\u6587\u6863\u3002\u6BCF\u884C\u4E00\u4E2A\u7C7B\u578B\u540D\u79F0\u3002").addTextArea((text) => {
+      text.setPlaceholder("\u4F8B\u5982\uFF1Agit\u65E5\u62A5").setValue(this.plugin.settings.excludedTypes.join("\n")).onChange(async (value) => {
+        this.plugin.settings.excludedTypes = parseLineList(value);
         await this.plugin.saveSettings();
       });
       text.inputEl.rows = 3;
@@ -493,10 +509,12 @@ var LAYOUT_OPTIONS = [
 
 // src/aggregator/note-aggregator.ts
 var NoteAggregator = class {
-  constructor(app, fields, dateFields = []) {
+  constructor(app, fields, dateFields = [], excludedProjects = [], excludedTypes = []) {
     this.app = app;
     this.fields = Array.from(/* @__PURE__ */ new Set([...fields, "\u4F5C\u8005", "\u9879\u76EE", "\u7C7B\u578B"]));
     this.dateFields = dateFields;
+    this.excludedProjects = excludedProjects.map((v) => v.trim().toLowerCase()).filter(Boolean);
+    this.excludedTypes = excludedTypes.map((v) => v.trim().toLowerCase()).filter(Boolean);
   }
   async aggregate() {
     var _a;
@@ -508,6 +526,9 @@ var NoteAggregator = class {
     for (const file of files) {
       const cache = this.app.metadataCache.getFileCache(file);
       if (!cache || !cache.frontmatter) {
+        continue;
+      }
+      if (this.shouldExclude(cache.frontmatter)) {
         continue;
       }
       for (const field of this.fields) {
@@ -539,6 +560,21 @@ var NoteAggregator = class {
       }
     }
     return result;
+  }
+  shouldExclude(frontmatter) {
+    if (this.excludedProjects.length > 0) {
+      const projectValues = this.normalizeValue(frontmatter["\u9879\u76EE"]).map((v) => v.toLowerCase());
+      if (projectValues.some((value) => this.excludedProjects.includes(value))) {
+        return true;
+      }
+    }
+    if (this.excludedTypes.length > 0) {
+      const typeValues = this.normalizeValue(frontmatter["\u7C7B\u578B"]).map((v) => v.toLowerCase());
+      if (typeValues.some((value) => this.excludedTypes.includes(value))) {
+        return true;
+      }
+    }
+    return false;
   }
   normalizeValue(raw) {
     if (Array.isArray(raw)) {
@@ -2015,7 +2051,13 @@ var HomeDashboardView = class extends import_obsidian4.ItemView {
     this.container = null;
     this.searchKeyword = "";
     this.plugin = plugin;
-    this.aggregator = new NoteAggregator(this.app, plugin.settings.aggregatedFields);
+    this.aggregator = new NoteAggregator(
+      this.app,
+      plugin.settings.aggregatedFields,
+      plugin.settings.dateFields,
+      plugin.settings.excludedProjects,
+      plugin.settings.excludedTypes
+    );
     this.currentLayout = "dashboard";
   }
   getViewType() {
@@ -2046,7 +2088,13 @@ var HomeDashboardView = class extends import_obsidian4.ItemView {
     const loadingEl = this.container.createDiv("home-dashboard-loading");
     loadingEl.setText("\u6B63\u5728\u6C47\u603B\u6570\u636E...");
     try {
-      this.aggregator = new NoteAggregator(this.app, this.plugin.settings.aggregatedFields, this.plugin.settings.dateFields);
+      this.aggregator = new NoteAggregator(
+        this.app,
+        this.plugin.settings.aggregatedFields,
+        this.plugin.settings.dateFields,
+        this.plugin.settings.excludedProjects,
+        this.plugin.settings.excludedTypes
+      );
       const result = await this.aggregator.aggregate();
       loadingEl.remove();
       this.renderResult(result);
