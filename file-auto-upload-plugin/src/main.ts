@@ -15,7 +15,16 @@ import { resolve, relative, join, basename, dirname } from "path-browserify";
 import { existsSync, unlink } from "fs";
 import fixPath from "fix-path";
 
-import { isAssetTypeAnAsset, arrayToObject, getEmbedMarkdown } from "./utils";
+import {
+  isAssetTypeAnAsset,
+  arrayToObject,
+  getEmbedMarkdown,
+  isHtmlFile,
+  wrapHtmlPreviewCode,
+  wrapHtmlPreviewPath,
+} from "./utils";
+import { renderHtmlPreview, scanAndRenderHtmlPreviews } from "./htmlPreview";
+import { htmlPreviewExtension } from "./htmlPreviewEditor";
 import { downloadAllImageFiles } from "./download";
 import { PicGoUploader, PicGoCoreUploader } from "./uploader";
 import { PicGoDeleter } from "./deleter";
@@ -123,6 +132,24 @@ export default class imageAutoUploadPlugin extends Plugin {
     });
 
     this.setupPasteHandler();
+    this.registerMarkdownCodeBlockProcessor("html-preview", (source, el, ctx) =>
+      renderHtmlPreview(el, source, this.app)
+    );
+    this.registerMarkdownPostProcessor(el => {
+      scanAndRenderHtmlPreviews(el, this.app);
+    });
+    this.registerEditorExtension(htmlPreviewExtension(this.app));
+    this.registerEvent(
+      this.app.workspace.on("active-leaf-change", () => {
+        window.setTimeout(() => {
+          const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+          if (!activeView) {
+            return;
+          }
+          scanAndRenderHtmlPreviews(activeView.containerEl, this.app);
+        }, 200);
+      })
+    );
     this.registerFileMenu();
     this.registerInterval(
       window.setInterval(() => {
@@ -334,11 +361,35 @@ export default class imageAutoUploadPlugin extends Plugin {
     ).getBasePath();
     const rootAssets = this.app.vault
       .getFiles()
-      .filter(file => file.path === file.name && isAssetTypeAnAsset(file.path));
+      .filter(
+        file =>
+          file.path === file.name &&
+          (isAssetTypeAnAsset(file.path) || isHtmlFile(file.path))
+      );
     result.scanned = rootAssets.length;
 
     for (const file of rootAssets) {
       try {
+        if (isHtmlFile(file.path)) {
+          const targetPath = this.getUniqueHtmlEmbedPath(file.name);
+          const previewCode = wrapHtmlPreviewPath(targetPath);
+          const replaced = await this.replaceHtmlFileReferencesWithCode(
+            file,
+            previewCode
+          );
+
+          if (replaced === 0) {
+            result.failed.push(`${file.name}: 没有笔记引用该 HTML 文件，已保留`);
+            continue;
+          }
+
+          await this.ensureHtmlEmbedsFolder();
+          await this.app.vault.adapter.rename(file.path, targetPath);
+          result.replaced += replaced;
+          result.deleted++;
+          continue;
+        }
+
         const uploadResult = await this.uploader.uploadFiles([
           join(basePath, file.path),
         ]);
@@ -563,6 +614,151 @@ export default class imageAutoUploadPlugin extends Plugin {
     };
   }
 
+  private replaceHtmlReferences(
+    content: string,
+    file: TFile,
+    previewCode: string
+  ): { content: string; replaced: number } {
+    const wikilinkRegex = /!\[\[([^\]]+)\]\]/g;
+    const markdownLinkRegex = /!\[([^\]]*)\]\(([^)]+)\)/g;
+    let replaced = 0;
+    const replacements: string[] = [];
+
+    const newContent = content
+      .replace(wikilinkRegex, (match, target) => {
+        const path = target.split("|")[0];
+
+        if (!this.isSameRootAsset(path, file)) {
+          return match;
+        }
+
+        replaced++;
+        replacements.push(previewCode);
+        return `\u0000HTML_ASSET_${replacements.length - 1}\u0000`;
+      })
+      .replace(markdownLinkRegex, (match, alt, target) => {
+        if (!this.isSameRootAsset(target, file)) {
+          return match;
+        }
+
+        replaced++;
+        replacements.push(previewCode);
+        return `\u0000HTML_ASSET_${replacements.length - 1}\u0000`;
+      })
+      .replace(/\u0000HTML_ASSET_(\d+)\u0000/g, (match, index) => {
+        return replacements[Number(index)] || match;
+      });
+
+    return {
+      content: newContent,
+      replaced,
+    };
+  }
+
+  private async replaceHtmlFileReferences(
+    file: TFile,
+    source: string
+  ): Promise<number> {
+    const previewCode = wrapHtmlPreviewCode(source);
+    return this.replaceHtmlFileReferencesWithCode(file, previewCode);
+  }
+
+  private async replaceHtmlFileReferencesWithCode(
+    file: TFile,
+    previewCode: string
+  ): Promise<number> {
+    let replaced = 0;
+
+    for (const noteFile of this.app.vault.getFiles().filter(this.isReferenceFile)) {
+      if (noteFile.extension === "canvas" || noteFile.path === file.path) {
+        continue;
+      }
+
+      const content = await this.app.vault.read(noteFile);
+      const result = this.replaceHtmlReferences(content, file, previewCode);
+
+      if (result.content !== content) {
+        await this.app.vault.modify(noteFile, result.content);
+        replaced += result.replaced;
+      }
+    }
+
+    return replaced;
+  }
+
+  private async ensureHtmlEmbedsFolder(): Promise<void> {
+    const folderPath = ".html-embeds";
+    if (!(await this.app.vault.adapter.exists(folderPath))) {
+      await this.app.vault.adapter.mkdir(folderPath);
+    }
+  }
+
+  private getUniqueHtmlEmbedPath(fileName: string): string {
+    const basePath = ".html-embeds/";
+    let targetPath = `${basePath}${fileName}`;
+
+    if (!this.app.vault.getAbstractFileByPath(targetPath)) {
+      return targetPath;
+    }
+
+    const timestamp = Date.now();
+    const extIndex = fileName.lastIndexOf(".");
+    const baseName = extIndex > 0 ? fileName.slice(0, extIndex) : fileName;
+    const ext = extIndex > 0 ? fileName.slice(extIndex) : "";
+    targetPath = `${basePath}${baseName}-${timestamp}${ext}`;
+
+    return targetPath;
+  }
+
+  private getHtmlFileSourcePath(file: File): string | null {
+    if (file.path) {
+      return file.path;
+    }
+
+    try {
+      const { webUtils } = (window as any).require("electron");
+      return webUtils.getPathForFile(file);
+    } catch {
+      return null;
+    }
+  }
+
+  private readFileAsText(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result ?? ""));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsText(file);
+    });
+  }
+
+  private async moveHtmlFileToEmbeds(file: File): Promise<string> {
+    await this.ensureHtmlEmbedsFolder();
+
+    const targetPath = this.getUniqueHtmlEmbedPath(file.name);
+    const sourcePath = this.getHtmlFileSourcePath(file);
+
+    if (sourcePath) {
+      const basePath = normalizePath(
+        (this.app.vault.adapter as FileSystemAdapter).getBasePath()
+      );
+      const normalizedSource = normalizePath(sourcePath);
+
+      if (
+        normalizedSource.startsWith(basePath + "/") &&
+        normalizedSource !== normalizePath(join(basePath, targetPath))
+      ) {
+        const relativeSource = normalizedSource.slice(basePath.length + 1);
+        await this.app.vault.adapter.rename(relativeSource, targetPath);
+        return targetPath;
+      }
+    }
+
+    const content = await this.readFileAsText(file);
+    await this.app.vault.adapter.write(targetPath, content);
+    return targetPath;
+  }
+
   // uploda all file
   uploadAllFile() {
     let content = this.helper.getValue();
@@ -690,75 +886,105 @@ export default class imageAutoUploadPlugin extends Plugin {
       this.app.workspace.on(
         "editor-paste",
         (evt: ClipboardEvent, editor: Editor, markdownView: MarkdownView) => {
-          const allowUpload = this.helper.getFrontmatterValue(
-            "image-auto-upload",
-            this.settings.uploadByClipSwitch
-          );
+          try {
+            const allowUpload = this.helper.getFrontmatterValue(
+              "image-auto-upload",
+              this.settings.uploadByClipSwitch
+            );
 
-          let files = evt.clipboardData.files;
-          if (!allowUpload) {
-            return;
-          }
+            let files = evt.clipboardData.files;
+            console.log("[file-auto-upload] paste event fired, files:", files?.length);
+            console.log(
+              "[file-auto-upload] file type:",
+              files?.[0]?.type,
+              "name:",
+              files?.[0]?.name
+            );
 
-          // 剪贴板内容有md格式的图片时
-          if (this.settings.workOnNetWork) {
-            const clipboardValue = evt.clipboardData.getData("text/plain");
-            const imageList = this.helper
-              .getImageLink(clipboardValue)
-              .filter(image => image.path.startsWith("http"))
-              .filter(
-                image =>
-                  !this.helper.hasBlackDomain(
-                    image.path,
-                    this.settings.newWorkBlackDomains
-                  )
-              );
-
-            if (imageList.length !== 0) {
-              this.uploader
-                .uploadFiles(imageList.map(item => item.path))
-                .then(res => {
-                  let value = this.helper.getValue();
-                  if (res.success) {
-                    let uploadUrlList = res.result;
-                    imageList.map(item => {
-                      const uploadImage = uploadUrlList.shift();
-                      let name = this.handleName(item.name);
-
-                      value = value.replaceAll(
-                        item.source,
-                        getEmbedMarkdown(item.name, uploadImage, name)
-                      );
-                    });
-                    this.helper.setValue(value);
-                  } else {
-                    new Notice("Upload error");
-                  }
-                });
+            if (!allowUpload) {
+              return;
             }
-          }
 
-          // 剪贴板中是图片时进行上传
-          if (this.canUpload(evt.clipboardData)) {
-            this.uploadFileAndEmbedImgurImage(
-              editor,
-              async (editor: Editor, pasteId: string) => {
-                let res: any;
-                res = await this.uploader.uploadFileByClipboard(
-                  evt.clipboardData.files
+            const htmlFile = Array.from(files).find(file => isHtmlFile(file.name));
+            if (htmlFile) {
+              console.log(
+                "[file-auto-upload] detected HTML file, entering html-preview flow"
+              );
+              evt.preventDefault();
+              (async () => {
+                try {
+                  await this.insertHtmlPreviewCodeBlock(editor, htmlFile);
+                } catch (error) {
+                  console.error("Failed to insert HTML file: ", error);
+                }
+              })();
+              return;
+            }
+
+            // 剪贴板内容有md格式的图片时
+            if (this.settings.workOnNetWork) {
+              const clipboardValue = evt.clipboardData.getData("text/plain");
+              const imageList = this.helper
+                .getImageLink(clipboardValue)
+                .filter(image => image.path.startsWith("http"))
+                .filter(
+                  image =>
+                    !this.helper.hasBlackDomain(
+                      image.path,
+                      this.settings.newWorkBlackDomains
+                    )
                 );
 
-                if (res.code !== 0) {
-                  this.handleFailedUpload(editor, pasteId, res.msg);
-                  return;
-                }
-                const url = res.data;
+              if (imageList.length !== 0) {
+                this.uploader
+                  .uploadFiles(imageList.map(item => item.path))
+                  .then(res => {
+                    let value = this.helper.getValue();
+                    if (res.success) {
+                      let uploadUrlList = res.result;
+                      imageList.map(item => {
+                        const uploadImage = uploadUrlList.shift();
+                        let name = this.handleName(item.name);
 
-                return url;
-              },
-              evt.clipboardData
-            ).catch();
-            evt.preventDefault();
+                        value = value.replaceAll(
+                          item.source,
+                          getEmbedMarkdown(item.name, uploadImage, name)
+                        );
+                      });
+                      this.helper.setValue(value);
+                    } else {
+                      new Notice("Upload error");
+                    }
+                  });
+              }
+            }
+
+            // 剪贴板中是图片时进行上传
+            if (this.canUpload(evt.clipboardData)) {
+              this.uploadFileAndEmbedImgurImage(
+                editor,
+                async (editor: Editor, pasteId: string) => {
+                  let res: any;
+                  res = await this.uploader.uploadFileByClipboard(
+                    evt.clipboardData.files
+                  );
+
+                  if (res.code !== 0) {
+                    this.handleFailedUpload(editor, pasteId, res.msg);
+                    return;
+                  }
+                  const url = res.data;
+
+                  return url;
+                },
+                evt.clipboardData
+              ).catch();
+              evt.preventDefault();
+            }
+          } catch (error) {
+            console.error("[file-auto-upload] paste handler error:", error);
+          } finally {
+            // 重置所有状态 flag
           }
         }
       )
@@ -778,6 +1004,17 @@ export default class imageAutoUploadPlugin extends Plugin {
           let files = evt.dataTransfer.files;
 
           if (!allowUpload) {
+            return;
+          }
+
+          const htmlFile = Array.from(files).find(file => isHtmlFile(file.name));
+          if (htmlFile) {
+            evt.preventDefault();
+            try {
+              await this.insertHtmlPreviewCodeBlock(editor, htmlFile);
+            } catch (error) {
+              console.error("Failed to insert HTML file: ", error);
+            }
             return;
           }
 
@@ -820,6 +1057,15 @@ export default class imageAutoUploadPlugin extends Plugin {
         }
       )
     );
+  }
+
+  private async insertHtmlPreviewCodeBlock(
+    editor: Editor,
+    file: File
+  ): Promise<string> {
+    const targetPath = await this.moveHtmlFileToEmbeds(file);
+    editor.replaceSelection(wrapHtmlPreviewPath(targetPath));
+    return targetPath;
   }
 
   canUpload(clipboardData: DataTransfer) {

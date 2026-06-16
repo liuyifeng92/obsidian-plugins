@@ -11,6 +11,14 @@ export default {
     format: "cjs",
     exports: "default",
   },
-  external: ["obsidian", "electron"],
+  external: [
+    "obsidian",
+    "electron",
+    "@codemirror/view",
+    "@codemirror/language",
+    "@codemirror/state",
+    "@lezer/common",
+    "@lezer/lr",
+  ],
   plugins: [typescript(), nodeResolve({ browser: false }), commonjs(), json()],
 };

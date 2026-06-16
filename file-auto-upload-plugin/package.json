@@ -17,6 +17,9 @@
   "author": "renmu",
   "license": "MIT",
   "devDependencies": {
+    "@codemirror/language": "^6.12.3",
+    "@codemirror/state": "^6.6.0",
+    "@codemirror/view": "^6.43.1",
     "@rollup/plugin-commonjs": "^24.1.0",
     "@rollup/plugin-json": "^6.1.0",
     "@rollup/plugin-node-resolve": "^15.3.0",

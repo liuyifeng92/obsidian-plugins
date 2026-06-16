@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import imageAutoUploadPlugin from "../src/main";
+import { wrapHtmlPreviewCode } from "../src/utils";
 
 const plugin = Object.create(imageAutoUploadPlugin.prototype);
 
@@ -302,6 +303,96 @@ describe("root asset cleanup", () => {
       replaced: 0,
       deleted: 0,
       failed: ["unused.png: 上传成功，但没有在笔记文件中找到引用，已保留本地文件"],
+    });
+  });
+});
+
+
+describe("HTML reference replacement", () => {
+  it("should replace wiki and markdown links to the same HTML file", () => {
+    const file = { name: "demo.html", path: "demo.html" };
+    const source = "<h1>Hello</h1>";
+    const content = [
+      "![[demo.html]]",
+      "![alt](demo.html)",
+      "![[other.html]]",
+      "![alt](./demo.html)",
+    ].join("\n");
+
+    const result = plugin.replaceHtmlReferences(content, file, source);
+    const expected = wrapHtmlPreviewCode(source);
+
+    expect(result.replaced).toBe(3);
+    expect(result.content).toBe(
+      [expected, expected, "![[other.html]]", expected].join("\n")
+    );
+  });
+
+  it("should inline a root HTML file into referencing notes and delete it", async () => {
+    const htmlFile = { name: "demo.html", path: "demo.html", extension: "html" };
+    const noteFile = { name: "note.md", path: "note.md", extension: "md" };
+    const plugin = Object.create(imageAutoUploadPlugin.prototype);
+
+    plugin.app = {
+      vault: {
+        adapter: {
+          getBasePath: () => "/vault",
+        },
+        getFiles: () => [htmlFile, noteFile],
+        read: vi.fn(async file => {
+          if (file.name === "demo.html") {
+            return "<b>HTML</b>";
+          }
+          return "![[demo.html]]";
+        }),
+        modify: vi.fn(),
+        delete: vi.fn(),
+      },
+    };
+
+    const result = await plugin.cleanupRootAssets();
+
+    expect(plugin.app.vault.modify).toHaveBeenCalledWith(
+      noteFile,
+      wrapHtmlPreviewCode("<b>HTML</b>")
+    );
+    expect(plugin.app.vault.delete).toHaveBeenCalledWith(htmlFile);
+    expect(result.deleted).toBe(1);
+    expect(result.replaced).toBe(1);
+  });
+
+  it("should keep a root HTML file when no note references it", async () => {
+    const htmlFile = { name: "demo.html", path: "demo.html", extension: "html" };
+    const noteFile = { name: "note.md", path: "note.md", extension: "md" };
+    const plugin = Object.create(imageAutoUploadPlugin.prototype);
+
+    plugin.app = {
+      vault: {
+        adapter: {
+          getBasePath: () => "/vault",
+        },
+        getFiles: () => [htmlFile, noteFile],
+        read: vi.fn(async file => {
+          if (file.name === "demo.html") {
+            return "<b>HTML</b>";
+          }
+          return "no reference";
+        }),
+        modify: vi.fn(),
+        delete: vi.fn(),
+      },
+    };
+
+    const result = await plugin.cleanupRootAssets();
+
+    expect(plugin.app.vault.modify).not.toHaveBeenCalled();
+    expect(plugin.app.vault.delete).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      scanned: 1,
+      uploaded: 0,
+      replaced: 0,
+      deleted: 0,
+      failed: ["demo.html: 没有笔记引用该 HTML 文件，已保留"],
     });
   });
 });

@@ -1,0 +1,192 @@
+.html-preview-container {
+  position: relative;
+  width: 100%;
+  height: 532px;
+  overflow: auto;
+  border: 2px solid var(--background-modifier-border);
+  border-radius: 8px;
+  padding: 16px;
+  background-color: var(--background-primary);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  margin: 1em 0;
+}
+
+.html-preview-toolbar {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  gap: 4px;
+  z-index: 10;
+}
+
+.html-preview-tool-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  background-color: var(--background-primary);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.html-preview-tool-button:hover {
+  background-color: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.html-preview-frame-wrapper {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  bottom: 16px;
+  left: 16px;
+}
+
+.html-preview-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  display: block;
+}
+
+.html-preview-source {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  background-color: var(--background-secondary);
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+
+.html-preview-resize-handle {
+  position: absolute;
+  left: 50%;
+  bottom: 4px;
+  transform: translateX(-50%);
+  width: 24px;
+  height: 8px;
+  z-index: 20;
+  cursor: ns-resize;
+  border-radius: 4px;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    transparent 20%,
+    var(--text-muted) 21%,
+    var(--text-muted) 40%,
+    transparent 41%,
+    transparent 60%,
+    var(--text-muted) 61%,
+    var(--text-muted) 80%,
+    transparent 81%
+  );
+  opacity: 0.6;
+  transition: opacity 0.15s ease;
+}
+
+.html-preview-resize-handle:hover {
+  opacity: 1;
+}
+
+.html-preview-resize-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 5;
+  cursor: ns-resize;
+  background: transparent;
+}
+
+.html-preview-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  padding: 16px;
+  color: var(--text-error);
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.html-preview-source code {
+  font-family: var(--font-monospace);
+  font-size: var(--code-size);
+  white-space: pre;
+}
+
+/* Hide Obsidian's default code-block edit button in Live Preview for html-preview blocks */
+.cm-embed-block:has(.html-preview-container) .edit-block-button,
+.cm-embed-block:has(.html-preview-container) .cm-edit-block-button,
+.html-preview-container ~ .edit-block-button,
+.html-preview-container ~ .cm-edit-block-button {
+  display: none !important;
+}
+
+.html-preview-modal {
+  width: 90vw;
+  height: 90vh;
+  max-width: 90vw;
+  max-height: 90vh;
+}
+
+.html-preview-modal .modal-content {
+  height: 100%;
+  padding: 0;
+}
+
+.html-preview-modal-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  display: block;
+}
+
+.html-preview-delete-popover {
+  position: fixed;
+  z-index: 1000;
+  min-width: 180px;
+  padding: 12px;
+  background-color: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.html-preview-delete-message {
+  margin-bottom: 12px;
+  font-size: var(--font-ui-small);
+  color: var(--text-normal);
+}
+
+.html-preview-delete-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.html-preview-delete-cancel,
+.html-preview-delete-confirm {
+  padding: 4px 10px;
+  font-size: var(--font-ui-small);
+  border-radius: 4px;
+  cursor: pointer;
+  border: 1px solid var(--background-modifier-border);
+  background-color: var(--background-primary);
+  color: var(--text-normal);
+}
+
+.html-preview-delete-confirm {
+  border-color: var(--background-modifier-error);
+  background-color: var(--background-modifier-error);
+  color: var(--text-on-accent);
+}

@@ -37,6 +37,23 @@ export function isAssetTypeAnAsset(path: string): Boolean {
   return isAnImage(ext) || MEDIA_EXT_LIST.includes(ext);
 }
 
+export function isHtmlFile(name: string): boolean {
+  const ext = extname(name).toLowerCase();
+  return ext === ".html" || ext === ".htm";
+}
+
+export function wrapHtmlPreviewCode(source: string): string {
+  const runs = source.match(/`+/g);
+  const longestRun = runs ? Math.max(...runs.map(run => run.length)) : 0;
+  const fenceLength = longestRun >= 3 ? longestRun + 1 : 5;
+  const fence = "`".repeat(fenceLength);
+  return `${fence}html-preview\n${source}\n${fence}\n`;
+}
+
+export function wrapHtmlPreviewPath(path: string): string {
+  return `\`\`\`html-preview\npath:${path}\n\`\`\`\n`;
+}
+
 export function getEmbedMarkdown(
   fileName: string,
   url: string,
