@@ -34,7 +34,7 @@ export default class HomeDashboardPlugin extends Plugin {
 		this.scheduleAutoUpdateCheck();
 
 		// 如果 ribbon 可用，添加左侧图标
-		this.addRibbonIcon("layout-dashboard", "打开主页", () => {
+		this.addRibbonIcon("gauge", "打开主页", () => {
 			this.openHomeDashboard();
 		});
 
@@ -60,21 +60,20 @@ export default class HomeDashboardPlugin extends Plugin {
 	}
 
 	private debouncedRefresh = debounce(() => {
-		void this.refreshOpenViews();
-	}, 300);
+		void this.refreshActiveView();
+	}, 2000);
 
-	private async refreshOpenViews(): Promise<void> {
-		const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_HOME_DASHBOARD);
-		await Promise.all(
-			leaves.map(async (leaf) => {
-				const view = leaf.view;
-				if (view instanceof HomeDashboardView) {
-					await view.render().catch((error) => {
-						console.error("Home dashboard refresh failed:", error);
-					});
-				}
-			})
-		);
+	private async refreshActiveView(): Promise<void> {
+		const activeLeaf = this.app.workspace.activeLeaf;
+		if (!activeLeaf) {
+			return;
+		}
+		const view = activeLeaf.view;
+		if (view instanceof HomeDashboardView) {
+			await view.render().catch((error) => {
+				console.error("Home dashboard refresh failed:", error);
+			});
+		}
 	}
 
 	async loadSettings(): Promise<void> {

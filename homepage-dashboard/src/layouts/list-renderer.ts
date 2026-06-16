@@ -5,7 +5,7 @@ export class ListRenderer implements LayoutRenderer {
 		container.empty();
 
 		const { plugin, searchKeyword, openNote } = options;
-		const fields = getSortedFields(result, plugin.settings.fieldOrder);
+		const fields = Object.keys(result);
 
 		if (fields.length === 0) {
 			renderEmpty(container, "未配置汇总字段，请在设置中添加。");
@@ -48,13 +48,6 @@ export class ListRenderer implements LayoutRenderer {
 			renderEmpty(container, "未找到任何匹配笔记。");
 		}
 	}
-}
-
-function getSortedFields(result: AggregatedResult, fieldOrder: string[]): string[] {
-	const allFields = Object.keys(result);
-	const ordered = fieldOrder.filter((field) => allFields.includes(field));
-	const remaining = allFields.filter((field) => !ordered.includes(field));
-	return [...ordered, ...remaining.sort((a, b) => a.localeCompare(b))];
 }
 
 function getSortedGroupKeys(groups: Record<string, NoteEntry[]>): string[] {

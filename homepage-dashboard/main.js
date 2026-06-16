@@ -31,28 +31,16 @@ var import_obsidian5 = require("obsidian");
 
 // src/settings/settings.ts
 var import_obsidian = require("obsidian");
-
-// src/types.ts
-var LAYOUT_OPTIONS = [
-  { value: "dashboard", label: "\u770B\u677F" },
-  { value: "list", label: "\u5217\u8868" },
-  { value: "card", label: "\u5361\u7247" },
-  { value: "table", label: "\u8868\u683C" },
-  { value: "calendar", label: "\u65E5\u5386" }
-];
-
-// src/settings/settings.ts
+var SETTING_TABS = ["\u901A\u7528", "\u5B57\u6BB5\u914D\u7F6E", "\u6570\u636E\u7EC4\u5408", "\u7248\u672C\u66F4\u65B0"];
 var DEFAULT_SETTINGS = {
   homeViewTitle: "FutureLAB",
   aggregatedFields: ["\u4F5C\u8005", "\u521B\u5EFA\u65F6\u95F4", "\u9879\u76EE", "\u7C7B\u578B"],
   fieldAliases: {},
   dateFields: ["\u521B\u5EFA\u65F6\u95F4"],
-  fieldOrder: [],
-  defaultLayout: "dashboard",
   dashboardCombinations: [],
   autoUpdate: true,
-  heatmapColor: "#32DC14",
-  fieldDistributionColor: "#f23030"
+  heatmapColor: "#28B80F",
+  fieldDistributionColor: "#B01111"
 };
 var HomeDashboardSettingTab = class extends import_obsidian.PluginSettingTab {
   constructor(app, plugin) {
@@ -62,70 +50,85 @@ var HomeDashboardSettingTab = class extends import_obsidian.PluginSettingTab {
     this.updateProgress = 0;
     this.updateResultMessage = "";
     this.latestVersion = "";
+    this.activeTab = "\u901A\u7528";
     this.plugin = plugin;
   }
   display() {
     const { containerEl } = this;
     containerEl.empty();
-    containerEl.createEl("h2", { text: "Home Dashboard \u8BBE\u7F6E" });
-    new import_obsidian.Setting(containerEl).setName("\u4E3B\u9875\u6807\u9898").setDesc("\u81EA\u5B9A\u4E49\u4E3B\u9875\u89C6\u56FE\u7684\u6807\u9898").addText(
+    this.renderTabs(containerEl);
+    const contentEl = containerEl.createDiv({ cls: "home-dashboard-tab-content" });
+    switch (this.activeTab) {
+      case "\u901A\u7528":
+        this.renderGeneralSettings(contentEl);
+        break;
+      case "\u5B57\u6BB5\u914D\u7F6E":
+        this.renderFieldConfig(contentEl);
+        break;
+      case "\u6570\u636E\u7EC4\u5408":
+        this.renderCombinationsSection(contentEl);
+        break;
+      case "\u7248\u672C\u66F4\u65B0":
+        this.renderVersionUpdateSection(contentEl);
+        break;
+    }
+  }
+  renderTabs(containerEl) {
+    const tabsEl = containerEl.createDiv({ cls: "home-dashboard-tabs" });
+    for (const tabId of SETTING_TABS) {
+      const button = tabsEl.createEl("button", {
+        cls: `home-dashboard-tab ${tabId === this.activeTab ? "is-active" : ""}`,
+        text: tabId
+      });
+      button.onclick = () => {
+        this.activeTab = tabId;
+        this.display();
+      };
+    }
+  }
+  renderGeneralSettings(contentEl) {
+    new import_obsidian.Setting(contentEl).setName("\u4E3B\u9875\u6807\u9898").setDesc("\u81EA\u5B9A\u4E49\u4E3B\u9875\u89C6\u56FE\u7684\u6807\u9898").addText(
       (text) => text.setPlaceholder("\u4E3B\u9875").setValue(this.plugin.settings.homeViewTitle).onChange(async (value) => {
         this.plugin.settings.homeViewTitle = value || "\u4E3B\u9875";
         await this.plugin.saveSettings();
       })
     );
-    new import_obsidian.Setting(containerEl).setName("\u6C47\u603B\u5B57\u6BB5").setDesc("\u8F93\u5165\u9700\u8981\u6C47\u603B\u7684 YAML frontmatter \u5B57\u6BB5\u540D\uFF0C\u7528\u82F1\u6587\u9017\u53F7\u5206\u9694\uFF08\u5982 date, author, project, type\uFF09").addTextArea((text) => {
+    new import_obsidian.Setting(contentEl).setName("\u70ED\u529B\u56FE\u989C\u8272").setDesc("\u65E5\u671F\u70ED\u529B\u56FE\u65B9\u5757\u7684\u57FA\u7840\u989C\u8272").addColorPicker(
+      (color) => color.setValue(this.plugin.settings.heatmapColor).onChange(async (value) => {
+        this.plugin.settings.heatmapColor = value;
+        await this.plugin.saveSettings();
+      })
+    );
+    new import_obsidian.Setting(contentEl).setName("\u5B57\u6BB5\u5206\u5E03\u4E3B\u8272").setDesc("\u5B57\u6BB5\u5206\u5E03\u56FE\u8868\uFF08\u80FD\u529B\u8005\u3001\u9879\u76EE\u3001\u7C7B\u578B\uFF09\u4E2D\u4F7F\u7528\u7684\u4E3B\u8272").addColorPicker(
+      (color) => color.setValue(this.plugin.settings.fieldDistributionColor).onChange(async (value) => {
+        this.plugin.settings.fieldDistributionColor = value;
+        await this.plugin.saveSettings();
+      })
+    );
+  }
+  renderFieldConfig(contentEl) {
+    new import_obsidian.Setting(contentEl).setName("\u6C47\u603B\u5B57\u6BB5").setDesc("\u8F93\u5165\u9700\u8981\u6C47\u603B\u7684 YAML frontmatter \u5B57\u6BB5\u540D\uFF0C\u7528\u82F1\u6587\u9017\u53F7\u5206\u9694\uFF08\u5982 date, author, project, type\uFF09").addTextArea((text) => {
       text.setPlaceholder("date, author, project, type").setValue(this.plugin.settings.aggregatedFields.join(", ")).onChange(async (value) => {
         this.plugin.settings.aggregatedFields = parseCommaList(value);
         await this.plugin.saveSettings();
       });
       text.inputEl.rows = 3;
     });
-    this.renderScanSection(containerEl);
-    new import_obsidian.Setting(containerEl).setName("\u5B57\u6BB5\u522B\u540D").setDesc("\u6BCF\u884C\u4E00\u4E2A\u6620\u5C04\uFF0C\u683C\u5F0F\uFF1A\u5B57\u6BB5\u540D=\u663E\u793A\u540D\uFF08\u5982 date=\u65E5\u671F\uFF09\u3002\u672A\u914D\u7F6E\u7684\u5B57\u6BB5\u5C06\u663E\u793A\u539F\u5B57\u6BB5\u540D\u3002").addTextArea((text) => {
+    new import_obsidian.Setting(contentEl).setName("\u5B57\u6BB5\u522B\u540D").setDesc("\u6BCF\u884C\u4E00\u4E2A\u6620\u5C04\uFF0C\u683C\u5F0F\uFF1A\u5B57\u6BB5\u540D=\u663E\u793A\u540D\uFF08\u5982 date=\u65E5\u671F\uFF09\u3002\u672A\u914D\u7F6E\u7684\u5B57\u6BB5\u5C06\u663E\u793A\u539F\u5B57\u6BB5\u540D\u3002").addTextArea((text) => {
       text.setPlaceholder("date=\u65E5\u671F\nauthor=\u4F5C\u8005").setValue(formatRecord(this.plugin.settings.fieldAliases)).onChange(async (value) => {
         this.plugin.settings.fieldAliases = parseRecord(value);
         await this.plugin.saveSettings();
       });
       text.inputEl.rows = 5;
     });
-    new import_obsidian.Setting(containerEl).setName("\u65E5\u671F\u5B57\u6BB5").setDesc("\u54EA\u4E9B\u5B57\u6BB5\u9700\u8981\u6309\u5E74/\u6708\u805A\u5408\uFF1F\u6BCF\u884C\u4E00\u4E2A\u5B57\u6BB5\u540D\uFF08\u901A\u5E38\u5305\u542B date\uFF09").addTextArea((text) => {
+    new import_obsidian.Setting(contentEl).setName("\u65E5\u671F\u5B57\u6BB5").setDesc("\u54EA\u4E9B\u5B57\u6BB5\u9700\u8981\u6309\u5E74/\u6708\u805A\u5408\uFF1F\u6BCF\u884C\u4E00\u4E2A\u5B57\u6BB5\u540D\uFF08\u901A\u5E38\u5305\u542B date\uFF09").addTextArea((text) => {
       text.setPlaceholder("date").setValue(this.plugin.settings.dateFields.join("\n")).onChange(async (value) => {
         this.plugin.settings.dateFields = parseLineList(value);
         await this.plugin.saveSettings();
       });
       text.inputEl.rows = 3;
     });
-    new import_obsidian.Setting(containerEl).setName("\u5B57\u6BB5\u5C55\u793A\u987A\u5E8F").setDesc("\u6BCF\u884C\u4E00\u4E2A\u5B57\u6BB5\u540D\uFF0C\u672A\u5217\u51FA\u7684\u5B57\u6BB5\u5C06\u6309\u539F\u6709\u987A\u5E8F\u6392\u5728\u540E\u9762").addTextArea((text) => {
-      text.setPlaceholder("date\nauthor\nproject\ntype").setValue(this.plugin.settings.fieldOrder.join("\n")).onChange(async (value) => {
-        this.plugin.settings.fieldOrder = parseLineList(value);
-        await this.plugin.saveSettings();
-      });
-      text.inputEl.rows = 5;
-    });
-    new import_obsidian.Setting(containerEl).setName("\u9ED8\u8BA4\u5E03\u5C40").setDesc("\u6253\u5F00\u4E3B\u9875\u65F6\u9ED8\u8BA4\u4F7F\u7528\u7684\u5E03\u5C40").addDropdown((dropdown) => {
-      for (const option of LAYOUT_OPTIONS) {
-        dropdown.addOption(option.value, option.label);
-      }
-      dropdown.setValue(this.plugin.settings.defaultLayout).onChange(async (value) => {
-        this.plugin.settings.defaultLayout = value;
-        await this.plugin.saveSettings();
-      });
-    });
-    new import_obsidian.Setting(containerEl).setName("\u70ED\u529B\u56FE\u989C\u8272").setDesc("\u65E5\u671F\u70ED\u529B\u56FE\u65B9\u5757\u7684\u57FA\u7840\u989C\u8272").addColorPicker(
-      (color) => color.setValue(this.plugin.settings.heatmapColor).onChange(async (value) => {
-        this.plugin.settings.heatmapColor = value;
-        await this.plugin.saveSettings();
-      })
-    );
-    new import_obsidian.Setting(containerEl).setName("\u5B57\u6BB5\u5206\u5E03\u4E3B\u8272").setDesc("\u5B57\u6BB5\u5206\u5E03\u56FE\u8868\uFF08\u80FD\u529B\u8005\u3001\u9879\u76EE\u3001\u7C7B\u578B\uFF09\u4E2D\u4F7F\u7528\u7684\u4E3B\u8272").addColorPicker(
-      (color) => color.setValue(this.plugin.settings.fieldDistributionColor).onChange(async (value) => {
-        this.plugin.settings.fieldDistributionColor = value;
-        await this.plugin.saveSettings();
-      })
-    );
-    this.renderCombinationsSection(containerEl);
-    this.renderVersionUpdateSection(containerEl);
+    this.renderScanSection(contentEl);
   }
   renderVersionUpdateSection(containerEl) {
     containerEl.createEl("h2", { text: "\u7248\u672C\u66F4\u65B0" });
@@ -472,6 +475,15 @@ var FieldSourceModal = class extends import_obsidian.Modal {
 // src/view/HomeDashboardView.ts
 var import_obsidian4 = require("obsidian");
 
+// src/types.ts
+var LAYOUT_OPTIONS = [
+  { value: "dashboard", label: "\u770B\u677F" },
+  { value: "list", label: "\u5217\u8868" },
+  { value: "card", label: "\u5361\u7247" },
+  { value: "table", label: "\u8868\u683C" },
+  { value: "calendar", label: "\u65E5\u5386" }
+];
+
 // src/aggregator/note-aggregator.ts
 var NoteAggregator = class {
   constructor(app, fields, dateFields = []) {
@@ -595,7 +607,7 @@ var ListRenderer = class {
   render(container, result, options) {
     container.empty();
     const { plugin, searchKeyword, openNote } = options;
-    const fields = getSortedFields(result, plugin.settings.fieldOrder);
+    const fields = Object.keys(result);
     if (fields.length === 0) {
       renderEmpty(container, "\u672A\u914D\u7F6E\u6C47\u603B\u5B57\u6BB5\uFF0C\u8BF7\u5728\u8BBE\u7F6E\u4E2D\u6DFB\u52A0\u3002");
       return;
@@ -628,12 +640,6 @@ var ListRenderer = class {
     }
   }
 };
-function getSortedFields(result, fieldOrder) {
-  const allFields = Object.keys(result);
-  const ordered = fieldOrder.filter((field) => allFields.includes(field));
-  const remaining = allFields.filter((field) => !ordered.includes(field));
-  return [...ordered, ...remaining.sort((a, b) => a.localeCompare(b))];
-}
 function getSortedGroupKeys(groups) {
   return Object.keys(groups).sort((a, b) => a.localeCompare(b));
 }
@@ -657,7 +663,7 @@ var CardRenderer = class {
   render(container, result, options) {
     container.empty();
     const { plugin, searchKeyword, openNote } = options;
-    const fields = getSortedFields2(result, plugin.settings.fieldOrder);
+    const fields = Object.keys(result);
     if (fields.length === 0) {
       renderEmpty2(container, "\u672A\u914D\u7F6E\u6C47\u603B\u5B57\u6BB5\uFF0C\u8BF7\u5728\u8BBE\u7F6E\u4E2D\u6DFB\u52A0\u3002");
       return;
@@ -694,12 +700,6 @@ var CardRenderer = class {
     }
   }
 };
-function getSortedFields2(result, fieldOrder) {
-  const allFields = Object.keys(result);
-  const ordered = fieldOrder.filter((field) => allFields.includes(field));
-  const remaining = allFields.filter((field) => !ordered.includes(field));
-  return [...ordered, ...remaining.sort((a, b) => a.localeCompare(b))];
-}
 function getSortedGroupKeys2(groups) {
   return Object.keys(groups).sort((a, b) => a.localeCompare(b));
 }
@@ -723,7 +723,7 @@ var TableRenderer = class {
   render(container, result, options) {
     container.empty();
     const { plugin, searchKeyword, openNote } = options;
-    const fields = getSortedFields3(result, plugin.settings.fieldOrder);
+    const fields = Object.keys(result);
     if (fields.length === 0) {
       renderEmpty3(container, "\u672A\u914D\u7F6E\u6C47\u603B\u5B57\u6BB5\uFF0C\u8BF7\u5728\u8BBE\u7F6E\u4E2D\u6DFB\u52A0\u3002");
       return;
@@ -765,12 +765,6 @@ var TableRenderer = class {
     }
   }
 };
-function getSortedFields3(result, fieldOrder) {
-  const allFields = Object.keys(result);
-  const ordered = fieldOrder.filter((field) => allFields.includes(field));
-  const remaining = allFields.filter((field) => !ordered.includes(field));
-  return [...ordered, ...remaining.sort((a, b) => a.localeCompare(b))];
-}
 function getSortedGroupKeys3(groups) {
   return Object.keys(groups).sort((a, b) => a.localeCompare(b));
 }
@@ -795,9 +789,7 @@ var CalendarRenderer = class {
     container.empty();
     const { plugin, searchKeyword, openNote } = options;
     const dateFields = plugin.settings.dateFields;
-    const fields = getSortedFields4(result, plugin.settings.fieldOrder).filter(
-      (field) => dateFields.includes(field)
-    );
+    const fields = Object.keys(result).filter((field) => dateFields.includes(field));
     if (fields.length === 0) {
       renderEmpty4(container, "\u672A\u914D\u7F6E\u65E5\u671F\u5B57\u6BB5\uFF0C\u65E0\u6CD5\u4F7F\u7528\u65E5\u5386\u5E03\u5C40\u3002");
       return;
@@ -906,12 +898,6 @@ function parseDate(value) {
 }
 function daysInMonth(year, monthIndex) {
   return new Date(year, monthIndex + 1, 0).getDate();
-}
-function getSortedFields4(result, fieldOrder) {
-  const allFields = Object.keys(result);
-  const ordered = fieldOrder.filter((field) => allFields.includes(field));
-  const remaining = allFields.filter((field) => !ordered.includes(field));
-  return [...ordered, ...remaining.sort((a, b) => a.localeCompare(b))];
 }
 function entryMatches4(entry, keyword) {
   if (!keyword) {
@@ -1025,9 +1011,9 @@ function renderFieldDistribution(container, result, aliases, app, openNote, fiel
   const authorStats = computeFieldStats(authorGroups, app);
   const projectStats = computeFieldStats(projectGroups, app);
   const typeStats = computeFieldStats(typeGroups, app);
-  container.createEl("h2", { cls: "kd-field-section-title", text: "\u5B57\u6BB5\u5206\u5E03" });
+  container.createEl("h2", { cls: "kd-field-section-title", text: "\u6C89\u6DC0\u6392\u884C" });
   const wrapper = container.createDiv("kd-field-panels");
-  const weeklyPanel = createPanel(wrapper, "\u672C\u5468\u6C89\u6DC0");
+  const weeklyPanel = createPanel(wrapper, "\u672C\u5468\u52A8\u6001");
   weeklyPanel.addClass("kd-field-panel--weekly");
   const weeklyColumns = weeklyPanel.createDiv("kd-field-panel-columns");
   const weeklyProjects = projectStats.filter((s) => s.weeklyNew > 0).map((s) => ({ key: s.key, count: s.weeklyNew, items: s.weeklyItems }));
@@ -1049,7 +1035,7 @@ function renderFieldDistribution(container, result, aliases, app, openNote, fiel
   } else {
     renderLollipopChart(createColumn(weeklyColumns, "\u80FD\u529B\u8005"), weeklyAuthors, app, openNote);
   }
-  const totalPanel = createPanel(wrapper, "\u7D2F\u8BA1\u6C89\u6DC0");
+  const totalPanel = createPanel(wrapper, "\u5386\u53F2\u5168\u5C40");
   totalPanel.addClass("kd-field-panel--cumulative");
   const totalLayout = totalPanel.createDiv("kd-field-panel-cumulative");
   const cumulativeRow = totalLayout.createDiv("kd-cumulative-row");
@@ -1511,12 +1497,12 @@ var DashboardRenderer = class {
     const uniqueFiles = new Set(flattened.map((entry) => entry.path));
     const frontmatterFiles = new Set(flattened.map((entry) => entry.path));
     const intro = container.createDiv("kd-dashboard-intro");
-    intro.createEl("p", { cls: "kd-dashboard-subtitle", text: "\u6D1E\u5BDF\u77E5\u8BC6\u6C89\u6DC0\u8D8B\u52BF\uFF0C\u638C\u63E1\u5185\u5BB9\u751F\u4EA7\u4E0E\u7ED3\u6784\u5206\u5E03" });
+    intro.createEl("p", { cls: "kd-dashboard-slogan", text: "\u6240\u6709\u6C89\u6DC0\uFF0C\u7EC8\u5C06\u6210\u4E3A\u58C1\u5792" });
     const sectionsWrapper = container.createDiv("home-dashboard-sections-wrapper");
     const dateFieldsWithData = allFields.filter((field) => dateFields.includes(field));
     if (dateFieldsWithData.length > 0) {
       const section = sectionsWrapper.createDiv("home-dashboard-section");
-      renderHeatmap(section, result, dateFieldsWithData, searchKeyword, openNote, app, plugin.settings.heatmapColor);
+      renderHeatmap(container, section, result, dateFieldsWithData, searchKeyword, openNote, app, plugin.settings.heatmapColor);
     }
     if (nonDateFields.length > 0) {
       const section = sectionsWrapper.createDiv("home-dashboard-section kd-field-section");
@@ -1533,12 +1519,12 @@ var DashboardRenderer = class {
     }
   }
 };
-function renderHeatmap(container, result, dateFields, searchKeyword, openNote, app, heatmapColor) {
-  var _a;
+function renderHeatmap(stateContainer, container, result, dateFields, searchKeyword, openNote, app, heatmapColor) {
+  var _a, _b, _c;
   const currentYear = new Date().getFullYear();
-  let selectedYear = currentYear;
-  let selectedAuthor = "";
-  const authorGroups = (_a = result["\u4F5C\u8005"]) != null ? _a : {};
+  let selectedYear = Number((_a = stateContainer.dataset.heatmapYear) != null ? _a : currentYear);
+  let selectedAuthor = (_b = stateContainer.dataset.heatmapAuthor) != null ? _b : "";
+  const authorGroups = (_c = result["\u4F5C\u8005"]) != null ? _c : {};
   const authorNames = Object.keys(authorGroups).sort((a, b) => a.localeCompare(b, "zh-CN"));
   const pathToAuthors = /* @__PURE__ */ new Map();
   for (const [author, entries] of Object.entries(authorGroups)) {
@@ -1550,12 +1536,15 @@ function renderHeatmap(container, result, dateFields, searchKeyword, openNote, a
     }
   }
   const header = container.createDiv("home-dashboard-section-header");
-  header.createEl("h2", { cls: "home-dashboard-section-title", text: "\u65E5\u671F\u70ED\u529B\u56FE" });
+  header.createEl("h2", { cls: "home-dashboard-section-title", text: "\u6C89\u6DC0\u65E5\u5386" });
   const controls = header.createDiv("home-dashboard-heatmap-controls");
   const authorSelect = controls.createEl("select", { cls: "home-dashboard-year-select" });
   authorSelect.createEl("option", { text: "\u5168\u5458", value: "" });
   for (const name of authorNames) {
-    authorSelect.createEl("option", { text: name, value: name });
+    const option = authorSelect.createEl("option", { text: name, value: name });
+    if (name === selectedAuthor) {
+      option.selected = true;
+    }
   }
   const yearSelect = controls.createEl("select", { cls: "home-dashboard-year-select" });
   for (let y = currentYear - 5; y <= currentYear + 1; y++) {
@@ -1564,6 +1553,8 @@ function renderHeatmap(container, result, dateFields, searchKeyword, openNote, a
       option.selected = true;
     }
   }
+  authorSelect.value = selectedAuthor;
+  yearSelect.value = String(selectedYear);
   const heatmapContainer = container.createDiv("home-dashboard-heatmap-container");
   const renderContent = () => {
     var _a2;
@@ -1664,13 +1655,17 @@ function renderHeatmap(container, result, dateFields, searchKeyword, openNote, a
       }
     }
   };
-  authorSelect.addEventListener("change", () => {
-    selectedAuthor = authorSelect.value;
-    renderContent();
+  authorSelect.addEventListener("change", (event) => {
+    const target = event.currentTarget;
+    selectedAuthor = target.value;
+    stateContainer.dataset.heatmapAuthor = selectedAuthor;
+    requestAnimationFrame(() => renderContent());
   });
-  yearSelect.addEventListener("change", () => {
-    selectedYear = Number(yearSelect.value);
-    renderContent();
+  yearSelect.addEventListener("change", (event) => {
+    const target = event.currentTarget;
+    selectedYear = Number(target.value);
+    stateContainer.dataset.heatmapYear = String(selectedYear);
+    requestAnimationFrame(() => renderContent());
   });
   renderContent();
 }
@@ -1956,7 +1951,7 @@ var HomeDashboardView = class extends import_obsidian4.ItemView {
     this.searchKeyword = "";
     this.plugin = plugin;
     this.aggregator = new NoteAggregator(this.app, plugin.settings.aggregatedFields);
-    this.currentLayout = plugin.settings.defaultLayout;
+    this.currentLayout = "dashboard";
   }
   getViewType() {
     return VIEW_TYPE_HOME_DASHBOARD;
@@ -1965,7 +1960,7 @@ var HomeDashboardView = class extends import_obsidian4.ItemView {
     return this.plugin.settings.homeViewTitle;
   }
   getIcon() {
-    return "layout-dashboard";
+    return "gauge";
   }
   async onOpen() {
     this.container = this.contentEl.createDiv("home-dashboard-container");
@@ -2035,7 +2030,7 @@ var HomeDashboardView = class extends import_obsidian4.ItemView {
     if (!this.container) {
       return;
     }
-    const fields = this.getSortedFields();
+    const fields = this.getSortedFields(result);
     if (fields.length === 0) {
       this.container.createDiv("home-dashboard-empty").setText("\u672A\u914D\u7F6E\u6C47\u603B\u5B57\u6BB5\uFF0C\u8BF7\u5728\u8BBE\u7F6E\u4E2D\u6DFB\u52A0\u3002");
       return;
@@ -2051,19 +2046,8 @@ var HomeDashboardView = class extends import_obsidian4.ItemView {
     };
     renderer.render(this.container, filteredResult, options);
   }
-  getSortedFields() {
-    const fields = this.plugin.settings.aggregatedFields;
-    const order = this.plugin.settings.fieldOrder;
-    const orderMap = new Map(order.map((field, index) => [field, index]));
-    return [...fields].sort((a, b) => {
-      var _a, _b;
-      const ai = (_a = orderMap.get(a)) != null ? _a : Infinity;
-      const bi = (_b = orderMap.get(b)) != null ? _b : Infinity;
-      if (ai !== bi) {
-        return ai - bi;
-      }
-      return a.localeCompare(b);
-    });
+  getSortedFields(result) {
+    return Object.keys(result).filter((field) => field);
   }
   filterResult(result, fields) {
     const keyword = this.searchKeyword.toLowerCase();
@@ -2101,8 +2085,8 @@ var HomeDashboardPlugin = class extends import_obsidian5.Plugin {
     this.pendingAutoReloadTimer = null;
     this.pendingAutoReloadVersion = "";
     this.debouncedRefresh = debounce(() => {
-      void this.refreshOpenViews();
-    }, 300);
+      void this.refreshActiveView();
+    }, 2e3);
   }
   async onload() {
     await this.loadSettings();
@@ -2117,7 +2101,7 @@ var HomeDashboardPlugin = class extends import_obsidian5.Plugin {
     });
     this.addSettingTab(new HomeDashboardSettingTab(this.app, this));
     this.scheduleAutoUpdateCheck();
-    this.addRibbonIcon("layout-dashboard", "\u6253\u5F00\u4E3B\u9875", () => {
+    this.addRibbonIcon("gauge", "\u6253\u5F00\u4E3B\u9875", () => {
       this.openHomeDashboard();
     });
     this.registerEvent(
@@ -2138,18 +2122,17 @@ var HomeDashboardPlugin = class extends import_obsidian5.Plugin {
     this.clearAutoUpdateCheckTimer();
     this.clearPendingAutoReloadTimer();
   }
-  async refreshOpenViews() {
-    const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_HOME_DASHBOARD);
-    await Promise.all(
-      leaves.map(async (leaf) => {
-        const view = leaf.view;
-        if (view instanceof HomeDashboardView) {
-          await view.render().catch((error) => {
-            console.error("Home dashboard refresh failed:", error);
-          });
-        }
-      })
-    );
+  async refreshActiveView() {
+    const activeLeaf = this.app.workspace.activeLeaf;
+    if (!activeLeaf) {
+      return;
+    }
+    const view = activeLeaf.view;
+    if (view instanceof HomeDashboardView) {
+      await view.render().catch((error) => {
+        console.error("Home dashboard refresh failed:", error);
+      });
+    }
   }
   async loadSettings() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());

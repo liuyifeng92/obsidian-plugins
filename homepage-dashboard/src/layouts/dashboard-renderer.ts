@@ -34,15 +34,15 @@ export class DashboardRenderer implements LayoutRenderer {
 
 		// 介绍区副标题
 		const intro = container.createDiv("kd-dashboard-intro");
-		intro.createEl("p", { cls: "kd-dashboard-subtitle", text: "洞察知识沉淀趋势，掌握内容生产与结构分布" });
+		intro.createEl("p", { cls: "kd-dashboard-slogan", text: "所有沉淀，终将成为壁垒" });
 
-		// 1) 日期热力图 + 2) 字段分布：共享一个 wrapper，使两者底框宽度一致
+		// 1) 沉淀日历 + 2) 沉淀排行：共享一个 wrapper，使两者底框宽度一致
 		const sectionsWrapper = container.createDiv("home-dashboard-sections-wrapper");
 
 		const dateFieldsWithData = allFields.filter((field) => dateFields.includes(field));
 		if (dateFieldsWithData.length > 0) {
 			const section = sectionsWrapper.createDiv("home-dashboard-section");
-			renderHeatmap(section, result, dateFieldsWithData, searchKeyword, openNote, app, plugin.settings.heatmapColor);
+			renderHeatmap(container, section, result, dateFieldsWithData, searchKeyword, openNote, app, plugin.settings.heatmapColor);
 		}
 
 		if (nonDateFields.length > 0) {
@@ -95,6 +95,7 @@ function countRecentDateNotes(result: AggregatedResult, dateFields: string[], da
 }
 
 function renderHeatmap(
+	stateContainer: HTMLElement,
 	container: HTMLElement,
 	result: AggregatedResult,
 	dateFields: string[],
@@ -104,8 +105,8 @@ function renderHeatmap(
 	heatmapColor: string
 ): void {
 	const currentYear = new Date().getFullYear();
-	let selectedYear = currentYear;
-	let selectedAuthor = "";
+	let selectedYear = Number(stateContainer.dataset.heatmapYear ?? currentYear);
+	let selectedAuthor = stateContainer.dataset.heatmapAuthor ?? "";
 
 	// 作者列表：从 result["作者"] 聚合，并建立 path -> authors 映射
 	const authorGroups = result["作者"] ?? {};
@@ -122,14 +123,17 @@ function renderHeatmap(
 
 	// 标题行：左侧标题 + 右侧能力者/年份选择
 	const header = container.createDiv("home-dashboard-section-header");
-	header.createEl("h2", { cls: "home-dashboard-section-title", text: "日期热力图" });
+	header.createEl("h2", { cls: "home-dashboard-section-title", text: "沉淀日历" });
 
 	const controls = header.createDiv("home-dashboard-heatmap-controls");
 
 	const authorSelect = controls.createEl("select", { cls: "home-dashboard-year-select" });
 	authorSelect.createEl("option", { text: "全员", value: "" });
 	for (const name of authorNames) {
-		authorSelect.createEl("option", { text: name, value: name });
+		const option = authorSelect.createEl("option", { text: name, value: name });
+		if (name === selectedAuthor) {
+			option.selected = true;
+		}
 	}
 
 	const yearSelect = controls.createEl("select", { cls: "home-dashboard-year-select" });
@@ -139,6 +143,9 @@ function renderHeatmap(
 			option.selected = true;
 		}
 	}
+
+	authorSelect.value = selectedAuthor;
+	yearSelect.value = String(selectedYear);
 
 	const heatmapContainer = container.createDiv("home-dashboard-heatmap-container");
 
@@ -254,14 +261,18 @@ function renderHeatmap(
 		}
 	};
 
-	authorSelect.addEventListener("change", () => {
-		selectedAuthor = authorSelect.value;
-		renderContent();
+	authorSelect.addEventListener("change", (event) => {
+		const target = event.currentTarget as HTMLSelectElement;
+		selectedAuthor = target.value;
+		stateContainer.dataset.heatmapAuthor = selectedAuthor;
+		requestAnimationFrame(() => renderContent());
 	});
 
-	yearSelect.addEventListener("change", () => {
-		selectedYear = Number(yearSelect.value);
-		renderContent();
+	yearSelect.addEventListener("change", (event) => {
+		const target = event.currentTarget as HTMLSelectElement;
+		selectedYear = Number(target.value);
+		stateContainer.dataset.heatmapYear = String(selectedYear);
+		requestAnimationFrame(() => renderContent());
 	});
 
 	renderContent();

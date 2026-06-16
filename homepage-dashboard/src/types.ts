@@ -38,8 +38,6 @@ export interface HomeDashboardSettings {
 	aggregatedFields: string[];
 	fieldAliases: Record<string, string>;
 	dateFields: string[];
-	fieldOrder: string[];
-	defaultLayout: DashboardLayout;
 	dashboardCombinations: DashboardCombination[];
 	autoUpdate: boolean;
 	heatmapColor: string;

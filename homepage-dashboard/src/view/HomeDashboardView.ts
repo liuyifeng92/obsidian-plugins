@@ -16,7 +16,7 @@ export class HomeDashboardView extends ItemView {
 		super(leaf);
 		this.plugin = plugin;
 		this.aggregator = new NoteAggregator(this.app, plugin.settings.aggregatedFields);
-		this.currentLayout = plugin.settings.defaultLayout;
+		this.currentLayout = "dashboard";
 	}
 
 	getViewType(): string {
@@ -28,7 +28,7 @@ export class HomeDashboardView extends ItemView {
 	}
 
 	getIcon(): string {
-		return "layout-dashboard";
+		return "gauge";
 	}
 
 	async onOpen(): Promise<void> {
@@ -112,7 +112,7 @@ export class HomeDashboardView extends ItemView {
 			return;
 		}
 
-		const fields = this.getSortedFields();
+		const fields = this.getSortedFields(result);
 		if (fields.length === 0) {
 			this.container.createDiv("home-dashboard-empty").setText("未配置汇总字段，请在设置中添加。");
 			return;
@@ -130,19 +130,8 @@ export class HomeDashboardView extends ItemView {
 		renderer.render(this.container, filteredResult, options);
 	}
 
-	private getSortedFields(): string[] {
-		const fields = this.plugin.settings.aggregatedFields;
-		const order = this.plugin.settings.fieldOrder;
-		const orderMap = new Map(order.map((field, index) => [field, index]));
-
-		return [...fields].sort((a, b) => {
-			const ai = orderMap.get(a) ?? Infinity;
-			const bi = orderMap.get(b) ?? Infinity;
-			if (ai !== bi) {
-				return ai - bi;
-			}
-			return a.localeCompare(b);
-		});
+	private getSortedFields(result: AggregatedResult): string[] {
+		return Object.keys(result).filter((field) => field);
 	}
 
 	private filterResult(result: AggregatedResult, fields: string[]): AggregatedResult {

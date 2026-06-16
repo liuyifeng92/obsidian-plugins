@@ -123,14 +123,14 @@
 	margin-bottom: clamp(24px, 3.5vw, 36px);
 }
 
-.kd-dashboard-subtitle {
-	font-size: 0.72rem;
-	font-weight: 800;
-	color: var(--kd-text-secondary);
+.kd-dashboard-slogan {
+	font-size: 28px;
+	font-weight: 900;
+	color: var(--kd-ink);
 	margin: 10px 0 0;
-	line-height: 1.4;
-	text-transform: uppercase;
-	letter-spacing: 0.12em;
+	line-height: 1.3;
+	font-family: "PingFang SC", "SF Pro Display", "Helvetica Neue", sans-serif;
+	letter-spacing: -0.02em;
 }
 
 .home-dashboard-actions {
@@ -1789,4 +1789,51 @@
 	.home-dashboard-kpi-card {
 		border-right: 2px solid var(--kd-ink);
 	}
+}
+
+/* ---------------------------------------------------------
+   12. Settings tabs
+   --------------------------------------------------------- */
+.home-dashboard-tabs {
+	background: var(--background-primary);
+	border-bottom: 1px solid var(--background-modifier-border);
+	display: flex;
+	gap: 8px;
+	margin-bottom: 16px;
+	padding-bottom: 8px;
+	position: sticky;
+	top: 0;
+	z-index: 10;
+}
+
+.home-dashboard-tab {
+	background: none;
+	border: none;
+	color: var(--text-muted);
+	cursor: pointer;
+	font-size: 14px;
+	padding: 6px 16px;
+}
+
+.home-dashboard-tab:hover {
+	color: var(--text-normal);
+}
+
+.home-dashboard-tab.is-active {
+	border-bottom: 2px solid var(--text-accent);
+	color: var(--text-accent);
+	font-weight: 600;
+}
+
+.home-dashboard-tab-content {
+	display: flow-root;
+	position: relative;
+	z-index: 0;
+}
+
+.home-dashboard-tab-content h2,
+.home-dashboard-tab-content h3,
+.home-dashboard-tab-content h4 {
+	margin-left: 0;
+	padding-left: 0;
 }

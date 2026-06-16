@@ -1,17 +1,18 @@
 import { App, Modal, Notice, PluginSettingTab, Setting, TFile } from "obsidian";
-import { DashboardCombination, DashboardLayout, HomeDashboardPluginLike, HomeDashboardSettings, LAYOUT_OPTIONS } from "../types";
+import { DashboardCombination, HomeDashboardPluginLike, HomeDashboardSettings } from "../types";
+
+const SETTING_TABS = ["通用", "字段配置", "数据组合", "版本更新"] as const;
+type SettingTabId = (typeof SETTING_TABS)[number];
 
 export const DEFAULT_SETTINGS: HomeDashboardSettings = {
 	homeViewTitle: "FutureLAB",
 	aggregatedFields: ["作者", "创建时间", "项目", "类型"],
 	fieldAliases: {},
 	dateFields: ["创建时间"],
-	fieldOrder: [],
-	defaultLayout: "dashboard",
 	dashboardCombinations: [],
 	autoUpdate: true,
-	heatmapColor: "#32DC14",
-	fieldDistributionColor: "#f23030",
+	heatmapColor: "#28B80F",
+	fieldDistributionColor: "#B01111",
 };
 
 export class HomeDashboardSettingTab extends PluginSettingTab {
@@ -21,6 +22,7 @@ export class HomeDashboardSettingTab extends PluginSettingTab {
 	private updateProgress = 0;
 	private updateResultMessage = "";
 	private latestVersion = "";
+	private activeTab: SettingTabId = "通用";
 
 	constructor(app: App, plugin: HomeDashboardPluginLike) {
 		super(app, plugin as any);
@@ -31,9 +33,41 @@ export class HomeDashboardSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		containerEl.createEl("h2", { text: "Home Dashboard 设置" });
+		this.renderTabs(containerEl);
 
-		new Setting(containerEl)
+		const contentEl = containerEl.createDiv({ cls: "home-dashboard-tab-content" });
+		switch (this.activeTab) {
+			case "通用":
+				this.renderGeneralSettings(contentEl);
+				break;
+			case "字段配置":
+				this.renderFieldConfig(contentEl);
+				break;
+			case "数据组合":
+				this.renderCombinationsSection(contentEl);
+				break;
+			case "版本更新":
+				this.renderVersionUpdateSection(contentEl);
+				break;
+		}
+	}
+
+	private renderTabs(containerEl: HTMLElement): void {
+		const tabsEl = containerEl.createDiv({ cls: "home-dashboard-tabs" });
+		for (const tabId of SETTING_TABS) {
+			const button = tabsEl.createEl("button", {
+				cls: `home-dashboard-tab ${tabId === this.activeTab ? "is-active" : ""}`,
+				text: tabId,
+			});
+			button.onclick = () => {
+				this.activeTab = tabId;
+				this.display();
+			};
+		}
+	}
+
+	private renderGeneralSettings(contentEl: HTMLElement): void {
+		new Setting(contentEl)
 			.setName("主页标题")
 			.setDesc("自定义主页视图的标题")
 			.addText((text) =>
@@ -46,7 +80,33 @@ export class HomeDashboardSettingTab extends PluginSettingTab {
 					})
 			);
 
-		new Setting(containerEl)
+		new Setting(contentEl)
+			.setName("热力图颜色")
+			.setDesc("日期热力图方块的基础颜色")
+			.addColorPicker((color) =>
+				color
+					.setValue(this.plugin.settings.heatmapColor)
+					.onChange(async (value) => {
+						this.plugin.settings.heatmapColor = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(contentEl)
+			.setName("字段分布主色")
+			.setDesc("字段分布图表（能力者、项目、类型）中使用的主色")
+			.addColorPicker((color) =>
+				color
+					.setValue(this.plugin.settings.fieldDistributionColor)
+					.onChange(async (value) => {
+						this.plugin.settings.fieldDistributionColor = value;
+						await this.plugin.saveSettings();
+					})
+			);
+	}
+
+	private renderFieldConfig(contentEl: HTMLElement): void {
+		new Setting(contentEl)
 			.setName("汇总字段")
 			.setDesc("输入需要汇总的 YAML frontmatter 字段名，用英文逗号分隔（如 date, author, project, type）")
 			.addTextArea((text) => {
@@ -60,9 +120,7 @@ export class HomeDashboardSettingTab extends PluginSettingTab {
 				text.inputEl.rows = 3;
 			});
 
-		this.renderScanSection(containerEl);
-
-		new Setting(containerEl)
+		new Setting(contentEl)
 			.setName("字段别名")
 			.setDesc("每行一个映射，格式：字段名=显示名（如 date=日期）。未配置的字段将显示原字段名。")
 			.addTextArea((text) => {
@@ -76,7 +134,7 @@ export class HomeDashboardSettingTab extends PluginSettingTab {
 				text.inputEl.rows = 5;
 			});
 
-		new Setting(containerEl)
+		new Setting(contentEl)
 			.setName("日期字段")
 			.setDesc("哪些字段需要按年/月聚合？每行一个字段名（通常包含 date）")
 			.addTextArea((text) => {
@@ -90,61 +148,7 @@ export class HomeDashboardSettingTab extends PluginSettingTab {
 				text.inputEl.rows = 3;
 			});
 
-		new Setting(containerEl)
-			.setName("字段展示顺序")
-			.setDesc("每行一个字段名，未列出的字段将按原有顺序排在后面")
-			.addTextArea((text) => {
-				text
-					.setPlaceholder("date\nauthor\nproject\ntype")
-					.setValue(this.plugin.settings.fieldOrder.join("\n"))
-					.onChange(async (value) => {
-						this.plugin.settings.fieldOrder = parseLineList(value);
-						await this.plugin.saveSettings();
-					});
-				text.inputEl.rows = 5;
-			});
-
-		new Setting(containerEl)
-			.setName("默认布局")
-			.setDesc("打开主页时默认使用的布局")
-			.addDropdown((dropdown) => {
-				for (const option of LAYOUT_OPTIONS) {
-					dropdown.addOption(option.value, option.label);
-				}
-				dropdown
-					.setValue(this.plugin.settings.defaultLayout)
-					.onChange(async (value) => {
-						this.plugin.settings.defaultLayout = value as DashboardLayout;
-						await this.plugin.saveSettings();
-					});
-			});
-
-		new Setting(containerEl)
-			.setName("热力图颜色")
-			.setDesc("日期热力图方块的基础颜色")
-			.addColorPicker((color) =>
-				color
-					.setValue(this.plugin.settings.heatmapColor)
-					.onChange(async (value) => {
-						this.plugin.settings.heatmapColor = value;
-						await this.plugin.saveSettings();
-					})
-			);
-
-		new Setting(containerEl)
-			.setName("字段分布主色")
-			.setDesc("字段分布图表（能力者、项目、类型）中使用的主色")
-			.addColorPicker((color) =>
-				color
-					.setValue(this.plugin.settings.fieldDistributionColor)
-					.onChange(async (value) => {
-						this.plugin.settings.fieldDistributionColor = value;
-						await this.plugin.saveSettings();
-					})
-			);
-
-		this.renderCombinationsSection(containerEl);
-		this.renderVersionUpdateSection(containerEl);
+		this.renderScanSection(contentEl);
 	}
 
 	private renderVersionUpdateSection(containerEl: HTMLElement): void {

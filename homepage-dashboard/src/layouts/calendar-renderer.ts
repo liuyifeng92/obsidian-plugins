@@ -12,9 +12,7 @@ export class CalendarRenderer implements LayoutRenderer {
 
 		const { plugin, searchKeyword, openNote } = options;
 		const dateFields = plugin.settings.dateFields;
-		const fields = getSortedFields(result, plugin.settings.fieldOrder).filter((field) =>
-			dateFields.includes(field)
-		);
+		const fields = Object.keys(result).filter((field) => dateFields.includes(field));
 
 		if (fields.length === 0) {
 			renderEmpty(container, "未配置日期字段，无法使用日历布局。");
@@ -156,13 +154,6 @@ function parseDate(value: string): Date | null {
 
 function daysInMonth(year: number, monthIndex: number): number {
 	return new Date(year, monthIndex + 1, 0).getDate();
-}
-
-function getSortedFields(result: AggregatedResult, fieldOrder: string[]): string[] {
-	const allFields = Object.keys(result);
-	const ordered = fieldOrder.filter((field) => allFields.includes(field));
-	const remaining = allFields.filter((field) => !ordered.includes(field));
-	return [...ordered, ...remaining.sort((a, b) => a.localeCompare(b))];
 }
 
 function entryMatches(entry: NoteEntry, keyword: string): boolean {

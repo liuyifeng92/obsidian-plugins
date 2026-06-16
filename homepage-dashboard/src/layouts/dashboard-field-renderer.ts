@@ -62,11 +62,11 @@ export function renderFieldDistribution(
 	const projectStats = computeFieldStats(projectGroups, app);
 	const typeStats = computeFieldStats(typeGroups, app);
 
-	container.createEl("h2", { cls: "kd-field-section-title", text: "字段分布" });
+	container.createEl("h2", { cls: "kd-field-section-title", text: "沉淀排行" });
 
 	const wrapper = container.createDiv("kd-field-panels");
 
-	const weeklyPanel = createPanel(wrapper, "本周沉淀");
+	const weeklyPanel = createPanel(wrapper, "本周动态");
 	weeklyPanel.addClass("kd-field-panel--weekly");
 	const weeklyColumns = weeklyPanel.createDiv("kd-field-panel-columns");
 
@@ -93,7 +93,7 @@ export function renderFieldDistribution(
 		renderLollipopChart(createColumn(weeklyColumns, "能力者"), weeklyAuthors, app, openNote);
 	}
 
-	const totalPanel = createPanel(wrapper, "累计沉淀");
+	const totalPanel = createPanel(wrapper, "历史全局");
 	totalPanel.addClass("kd-field-panel--cumulative");
 
 	const totalLayout = totalPanel.createDiv("kd-field-panel-cumulative");
