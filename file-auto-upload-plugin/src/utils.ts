@@ -47,11 +47,11 @@ export function wrapHtmlPreviewCode(source: string): string {
   const longestRun = runs ? Math.max(...runs.map(run => run.length)) : 0;
   const fenceLength = longestRun >= 3 ? longestRun + 1 : 5;
   const fence = "`".repeat(fenceLength);
-  return `${fence}html-preview\n${source}\n${fence}\n`;
+  return `\n${fence}html-preview\n${source}\n${fence}\n`;
 }
 
 export function wrapHtmlPreviewPath(path: string): string {
-  return `\`\`\`html-preview\npath:${path}\n\`\`\`\n`;
+  return `\n\`\`\`html-preview\npath:${path}\n\`\`\`\n`;
 }
 
 export function getEmbedMarkdown(
