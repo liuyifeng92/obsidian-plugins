@@ -1,6 +1,6 @@
 {
   "name": "obsidian-image-auto-upload-plugin",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "type": "module",
   "description": "Upload images from clipboard/drag-and-drop via PicGo and embed them into notes; also preview HTML files with html-preview code blocks.",
   "main": "main.js",
