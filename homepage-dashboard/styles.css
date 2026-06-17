@@ -154,9 +154,12 @@
 	color: var(--text-normal);
 }
 
-.theme-dark .kd-treemap-label,
-.theme-dark .kd-bubble-label {
+.theme-dark .kd-treemap-label {
 	color: var(--text-normal);
+}
+
+.theme-dark .kd-bubble-label {
+	fill: var(--text-on-accent);
 }
 
 .theme-dark .kd-field-tab.is-active::after {
