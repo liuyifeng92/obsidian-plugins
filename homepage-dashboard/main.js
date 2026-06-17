@@ -30,473 +30,10 @@ module.exports = __toCommonJS(main_exports);
 var import_obsidian5 = require("obsidian");
 
 // src/settings/settings.ts
-var import_obsidian = require("obsidian");
-var SETTING_TABS = ["\u901A\u7528", "\u5B57\u6BB5\u914D\u7F6E", "\u6570\u636E\u7EC4\u5408", "\u7248\u672C\u66F4\u65B0"];
-var DEFAULT_SETTINGS = {
-  homeViewTitle: "FutureLAB",
-  aggregatedFields: ["\u4F5C\u8005", "\u521B\u5EFA\u65F6\u95F4", "\u9879\u76EE", "\u7C7B\u578B"],
-  fieldAliases: {},
-  dateFields: ["\u521B\u5EFA\u65F6\u95F4"],
-  dashboardCombinations: [],
-  autoUpdate: true,
-  heatmapColor: "#28B80F",
-  fieldDistributionColor: "#B01111",
-  autoOpenOnStartup: true,
-  excludedProjects: [],
-  excludedTypes: ["git\u65E5\u62A5"]
-};
-var HomeDashboardSettingTab = class extends import_obsidian.PluginSettingTab {
-  constructor(app, plugin) {
-    super(app, plugin);
-    this.isCheckingUpdate = false;
-    this.isUpdating = false;
-    this.updateProgress = 0;
-    this.updateResultMessage = "";
-    this.latestVersion = "";
-    this.activeTab = "\u901A\u7528";
-    this.plugin = plugin;
-  }
-  display() {
-    const { containerEl } = this;
-    containerEl.empty();
-    this.renderTabs(containerEl);
-    const contentEl = containerEl.createDiv({ cls: "home-dashboard-tab-content" });
-    switch (this.activeTab) {
-      case "\u901A\u7528":
-        this.renderGeneralSettings(contentEl);
-        break;
-      case "\u5B57\u6BB5\u914D\u7F6E":
-        this.renderFieldConfig(contentEl);
-        break;
-      case "\u6570\u636E\u7EC4\u5408":
-        this.renderCombinationsSection(contentEl);
-        break;
-      case "\u7248\u672C\u66F4\u65B0":
-        this.renderVersionUpdateSection(contentEl);
-        break;
-    }
-  }
-  renderTabs(containerEl) {
-    const tabsEl = containerEl.createDiv({ cls: "home-dashboard-tabs" });
-    for (const tabId of SETTING_TABS) {
-      const button = tabsEl.createEl("button", {
-        cls: `home-dashboard-tab ${tabId === this.activeTab ? "is-active" : ""}`,
-        text: tabId
-      });
-      button.onclick = () => {
-        this.activeTab = tabId;
-        this.display();
-      };
-    }
-  }
-  renderGeneralSettings(contentEl) {
-    new import_obsidian.Setting(contentEl).setName("\u81EA\u52A8\u6253\u5F00 Dashboard").setDesc("\u6BCF\u6B21\u542F\u52A8 Obsidian \u6216\u6BCF\u5929\u9996\u6B21\u5207\u56DE\u65F6\u81EA\u52A8\u8FDB\u5165 Dashboard\u3002").addToggle(
-      (toggle) => toggle.setValue(this.plugin.settings.autoOpenOnStartup).onChange(async (value) => {
-        this.plugin.settings.autoOpenOnStartup = value;
-        await this.plugin.saveSettings();
-      })
-    );
-    new import_obsidian.Setting(contentEl).setName("\u4E3B\u9875\u6807\u9898").setDesc("\u81EA\u5B9A\u4E49\u4E3B\u9875\u89C6\u56FE\u7684\u6807\u9898").addText(
-      (text) => text.setPlaceholder("\u4E3B\u9875").setValue(this.plugin.settings.homeViewTitle).onChange(async (value) => {
-        this.plugin.settings.homeViewTitle = value || "\u4E3B\u9875";
-        await this.plugin.saveSettings();
-      })
-    );
-    new import_obsidian.Setting(contentEl).setName("\u70ED\u529B\u56FE\u989C\u8272").setDesc("\u65E5\u671F\u70ED\u529B\u56FE\u65B9\u5757\u7684\u57FA\u7840\u989C\u8272").addColorPicker(
-      (color) => color.setValue(this.plugin.settings.heatmapColor).onChange(async (value) => {
-        this.plugin.settings.heatmapColor = value;
-        await this.plugin.saveSettings();
-      })
-    );
-    new import_obsidian.Setting(contentEl).setName("\u5B57\u6BB5\u5206\u5E03\u4E3B\u8272").setDesc("\u5B57\u6BB5\u5206\u5E03\u56FE\u8868\uFF08\u80FD\u529B\u8005\u3001\u9879\u76EE\u3001\u7C7B\u578B\uFF09\u4E2D\u4F7F\u7528\u7684\u4E3B\u8272").addColorPicker(
-      (color) => color.setValue(this.plugin.settings.fieldDistributionColor).onChange(async (value) => {
-        this.plugin.settings.fieldDistributionColor = value;
-        await this.plugin.saveSettings();
-      })
-    );
-  }
-  renderFieldConfig(contentEl) {
-    new import_obsidian.Setting(contentEl).setName("\u6C47\u603B\u5B57\u6BB5").setDesc("\u8F93\u5165\u9700\u8981\u6C47\u603B\u7684 YAML frontmatter \u5B57\u6BB5\u540D\uFF0C\u7528\u82F1\u6587\u9017\u53F7\u5206\u9694\uFF08\u5982 date, author, project, type\uFF09").addTextArea((text) => {
-      text.setPlaceholder("date, author, project, type").setValue(this.plugin.settings.aggregatedFields.join(", ")).onChange(async (value) => {
-        this.plugin.settings.aggregatedFields = parseCommaList(value);
-        await this.plugin.saveSettings();
-      });
-      text.inputEl.rows = 3;
-    });
-    new import_obsidian.Setting(contentEl).setName("\u5B57\u6BB5\u522B\u540D").setDesc("\u6BCF\u884C\u4E00\u4E2A\u6620\u5C04\uFF0C\u683C\u5F0F\uFF1A\u5B57\u6BB5\u540D=\u663E\u793A\u540D\uFF08\u5982 date=\u65E5\u671F\uFF09\u3002\u672A\u914D\u7F6E\u7684\u5B57\u6BB5\u5C06\u663E\u793A\u539F\u5B57\u6BB5\u540D\u3002").addTextArea((text) => {
-      text.setPlaceholder("date=\u65E5\u671F\nauthor=\u4F5C\u8005").setValue(formatRecord(this.plugin.settings.fieldAliases)).onChange(async (value) => {
-        this.plugin.settings.fieldAliases = parseRecord(value);
-        await this.plugin.saveSettings();
-      });
-      text.inputEl.rows = 5;
-    });
-    new import_obsidian.Setting(contentEl).setName("\u65E5\u671F\u5B57\u6BB5").setDesc("\u54EA\u4E9B\u5B57\u6BB5\u9700\u8981\u6309\u5E74/\u6708\u805A\u5408\uFF1F\u6BCF\u884C\u4E00\u4E2A\u5B57\u6BB5\u540D\uFF08\u901A\u5E38\u5305\u542B date\uFF09").addTextArea((text) => {
-      text.setPlaceholder("date").setValue(this.plugin.settings.dateFields.join("\n")).onChange(async (value) => {
-        this.plugin.settings.dateFields = parseLineList(value);
-        await this.plugin.saveSettings();
-      });
-      text.inputEl.rows = 3;
-    });
-    new import_obsidian.Setting(contentEl).setName("\u6392\u9664\u9879\u76EE").setDesc("\u6574\u4F53\u8BA1\u7B97\u65F6\u6392\u9664\u8FD9\u4E9B\u9879\u76EE\u5BF9\u5E94\u7684\u6587\u6863\u3002\u6BCF\u884C\u4E00\u4E2A\u9879\u76EE\u540D\u79F0\u3002").addTextArea((text) => {
-      text.setPlaceholder("\u4F8B\u5982\uFF1A\u5F52\u6863\\n\u4E34\u65F6").setValue(this.plugin.settings.excludedProjects.join("\n")).onChange(async (value) => {
-        this.plugin.settings.excludedProjects = parseLineList(value);
-        await this.plugin.saveSettings();
-      });
-      text.inputEl.rows = 3;
-    });
-    new import_obsidian.Setting(contentEl).setName("\u6392\u9664\u7C7B\u578B").setDesc("\u6574\u4F53\u8BA1\u7B97\u65F6\u6392\u9664\u8FD9\u4E9B\u7C7B\u578B\u7684\u6587\u6863\u3002\u6BCF\u884C\u4E00\u4E2A\u7C7B\u578B\u540D\u79F0\u3002").addTextArea((text) => {
-      text.setPlaceholder("\u4F8B\u5982\uFF1Agit\u65E5\u62A5").setValue(this.plugin.settings.excludedTypes.join("\n")).onChange(async (value) => {
-        this.plugin.settings.excludedTypes = parseLineList(value);
-        await this.plugin.saveSettings();
-      });
-      text.inputEl.rows = 3;
-    });
-    this.renderScanSection(contentEl);
-  }
-  renderVersionUpdateSection(containerEl) {
-    containerEl.createEl("h2", { text: "\u7248\u672C\u66F4\u65B0" });
-    containerEl.createEl("h3", { text: "homepage-dashboard" });
-    containerEl.createDiv({
-      cls: "auto-frontmatter-about-version",
-      text: `\u5F53\u524D\u7248\u672C\uFF1A${this.plugin.manifest.version}`
-    });
-    const actionEl = containerEl.createDiv({ cls: "auto-frontmatter-about-action" });
-    const checkButton = actionEl.createEl("button", {
-      cls: "mod-cta auto-frontmatter-about-check-btn",
-      text: this.isCheckingUpdate ? "\u68C0\u67E5\u4E2D..." : "\u68C0\u67E5\u66F4\u65B0"
-    });
-    checkButton.disabled = this.isCheckingUpdate || this.isUpdating;
-    checkButton.onclick = async () => {
-      this.isCheckingUpdate = true;
-      this.updateResultMessage = "";
-      this.latestVersion = "";
-      this.display();
-      const result = await this.plugin.checkForUpdate();
-      this.isCheckingUpdate = false;
-      if (result.error === "not_found") {
-        new import_obsidian.Notice("\u672A\u627E\u5230\u8FDC\u7AEF\u4ED3\u5E93\uFF0C\u8BF7\u68C0\u67E5\u7F51\u7EDC");
-        this.updateResultMessage = "\u672A\u627E\u5230\u8FDC\u7AEF\u4ED3\u5E93\uFF0C\u8BF7\u68C0\u67E5\u7F51\u7EDC";
-      } else if (result.error) {
-        new import_obsidian.Notice(result.error);
-        this.updateResultMessage = result.error;
-      } else if (result.hasUpdate) {
-        this.latestVersion = result.version;
-        this.updateResultMessage = `\u{1F504} \u53D1\u73B0\u65B0\u7248\u672C\uFF1A${result.version}\uFF08\u5F53\u524D ${this.plugin.manifest.version}\uFF09`;
-      } else {
-        this.updateResultMessage = `\u2705 \u5F53\u524D\u5DF2\u662F\u6700\u65B0\u7248\u672C\uFF08${this.plugin.manifest.version}\uFF09`;
-      }
-      this.display();
-    };
-    if (this.updateResultMessage) {
-      const resultEl = containerEl.createDiv({ cls: "auto-frontmatter-about-result" });
-      resultEl.createDiv({ text: this.updateResultMessage });
-      if (this.latestVersion) {
-        const updateButton = resultEl.createEl("button", {
-          cls: "mod-cta auto-frontmatter-about-update-btn",
-          text: this.isUpdating ? `\u66F4\u65B0\u4E2D...\uFF08${this.updateProgress}/3\uFF09` : "\u7ACB\u5373\u66F4\u65B0"
-        });
-        updateButton.disabled = this.isUpdating;
-        updateButton.onclick = async () => {
-          this.isUpdating = true;
-          this.updateProgress = 0;
-          this.display();
-          try {
-            await this.plugin.performUpdate(this.latestVersion, (step, total) => {
-              this.updateProgress = step;
-              this.display();
-            });
-            this.isUpdating = false;
-            this.latestVersion = "";
-            this.updateResultMessage = "";
-          } catch (error) {
-            this.isUpdating = false;
-            new import_obsidian.Notice(`\u66F4\u65B0\u5931\u8D25\uFF1A${error}`);
-            this.updateResultMessage = `\u66F4\u65B0\u5931\u8D25\uFF1A${error}`;
-          }
-          this.display();
-        };
-      }
-    }
-    containerEl.createEl("h3", { text: "\u81EA\u52A8\u66F4\u65B0", cls: "auto-frontmatter-about-config-title" });
-    new import_obsidian.Setting(containerEl).setName("\u81EA\u52A8\u68C0\u67E5\u66F4\u65B0").setDesc("\u6BCF 60 \u5206\u949F\u81EA\u52A8\u68C0\u67E5\u5E76\u66F4\u65B0\u5230\u6700\u65B0\u7248\u672C\u3002").addToggle(
-      (toggle) => toggle.setValue(this.plugin.settings.autoUpdate).onChange(async (value) => {
-        this.plugin.settings.autoUpdate = value;
-        await this.plugin.saveSettings();
-      })
-    );
-  }
-  renderScanSection(containerEl) {
-    const scanContainer = containerEl.createEl("div");
-    scanContainer.style.marginBottom = "var(--size-4-3)";
-    const header = scanContainer.createEl("div");
-    header.style.display = "flex";
-    header.style.justifyContent = "space-between";
-    header.style.alignItems = "center";
-    header.style.marginBottom = "var(--size-4-2)";
-    const title = header.createEl("h3", { text: "\u626B\u63CF\u4ED3\u5E93\u5B57\u6BB5" });
-    title.style.margin = "0";
-    const resultContainer = scanContainer.createEl("div");
-    resultContainer.style.display = "flex";
-    resultContainer.style.flexWrap = "wrap";
-    resultContainer.style.gap = "var(--size-4-2)";
-    const scanButton = header.createEl("button", { text: "\u626B\u63CF\u5B57\u6BB5" });
-    scanButton.addClass("mod-cta");
-    scanButton.onclick = async () => {
-      scanButton.setText("\u626B\u63CF\u4E2D...");
-      scanButton.disabled = true;
-      const results = await this.scanFields();
-      scanButton.setText("\u626B\u63CF\u5B57\u6BB5");
-      scanButton.disabled = false;
-      resultContainer.empty();
-      if (results.length === 0) {
-        resultContainer.createEl("span", {
-          text: "\u672A\u627E\u5230\u4EFB\u4F55 frontmatter \u5B57\u6BB5\u3002",
-          cls: "home-dashboard-scan-empty"
-        });
-        return;
-      }
-      for (const { field, files } of results) {
-        const isSelected = this.plugin.settings.aggregatedFields.includes(field);
-        const item = resultContainer.createEl("div", {
-          cls: "home-dashboard-scan-item"
-        });
-        const tag = item.createEl("button", {
-          text: field,
-          cls: `home-dashboard-scan-tag ${isSelected ? "is-selected" : ""}`
-        });
-        tag.disabled = isSelected;
-        tag.title = isSelected ? "\u5DF2\u6DFB\u52A0\u5230\u6C47\u603B\u5B57\u6BB5" : "\u70B9\u51FB\u6DFB\u52A0\u5230\u6C47\u603B\u5B57\u6BB5";
-        tag.onclick = async () => {
-          if (!this.plugin.settings.aggregatedFields.includes(field)) {
-            this.plugin.settings.aggregatedFields.push(field);
-            await this.plugin.saveSettings();
-            this.display();
-          }
-        };
-        if (files.length > 0) {
-          const sourceBtn = item.createEl("button", {
-            text: String(files.length),
-            cls: "home-dashboard-scan-source-btn"
-          });
-          sourceBtn.title = "\u67E5\u770B\u6765\u6E90\u6587\u4EF6";
-          sourceBtn.onclick = (e) => {
-            e.stopPropagation();
-            new FieldSourceModal(this.app, field, files).open();
-          };
-        }
-      }
-    };
-  }
-  async scanFields() {
-    const fieldMap = /* @__PURE__ */ new Map();
-    const files = this.app.vault.getMarkdownFiles();
-    for (const file of files) {
-      const cache = this.app.metadataCache.getFileCache(file);
-      if (cache == null ? void 0 : cache.frontmatter) {
-        for (const key of Object.keys(cache.frontmatter)) {
-          if (!fieldMap.has(key)) {
-            fieldMap.set(key, /* @__PURE__ */ new Set());
-          }
-          fieldMap.get(key).add(file.path);
-        }
-      }
-    }
-    return Array.from(fieldMap.entries()).map(([field, fileSet]) => ({ field, files: Array.from(fileSet).sort() })).sort((a, b) => a.field.localeCompare(b.field));
-  }
-  renderCombinationsSection(containerEl) {
-    containerEl.createEl("h3", { text: "\u6570\u636E\u7EC4\u5408" });
-    const descEl = containerEl.createEl("p", {
-      text: "\u914D\u7F6E\u591A\u7EC4\u7EC4\u5408\u89C4\u5219\u3002\u6BCF\u7EC4\u7EC4\u5408\u5305\u542B\u4E00\u4E2A\u540D\u79F0\u548C\u591A\u4E2A\u300C\u5B57\u6BB5=\u503C\u300D\u89C4\u5219\uFF0C\u7528\u4E8E\u5728\u770B\u677F\u4E2D\u7B5B\u9009\u548C\u5C55\u793A\u6570\u636E\u3002"
-    });
-    descEl.style.color = "var(--text-muted)";
-    descEl.style.fontSize = "var(--font-smaller)";
-    descEl.style.marginBottom = "var(--size-4-3)";
-    const listContainer = containerEl.createEl("div");
-    listContainer.style.display = "flex";
-    listContainer.style.flexDirection = "column";
-    listContainer.style.gap = "var(--size-4-3)";
-    const renderList = () => {
-      listContainer.empty();
-      this.plugin.settings.dashboardCombinations.forEach((combination, combinationIndex) => {
-        const card = listContainer.createEl("div");
-        card.style.border = "1px solid var(--background-modifier-border)";
-        card.style.borderRadius = "var(--radius-s)";
-        card.style.padding = "var(--size-4-3)";
-        card.style.backgroundColor = "var(--background-primary-alt)";
-        const nameRow = card.createEl("div");
-        nameRow.style.display = "flex";
-        nameRow.style.gap = "var(--size-4-2)";
-        nameRow.style.alignItems = "center";
-        nameRow.style.marginBottom = "var(--size-4-3)";
-        const nameLabel = nameRow.createEl("label", { text: "\u7EC4\u5408\u540D\u79F0" });
-        nameLabel.style.fontWeight = "var(--font-semibold)";
-        nameLabel.style.color = "var(--text-normal)";
-        nameLabel.style.minWidth = "80px";
-        const nameInput = nameRow.createEl("input");
-        nameInput.type = "text";
-        nameInput.placeholder = "\u4F8B\u5982\uFF1A\u6700\u8FD1\u66F4\u65B0";
-        nameInput.value = combination.name;
-        nameInput.style.flex = "1";
-        nameInput.style.padding = "var(--size-4-1) var(--size-4-2)";
-        nameInput.style.border = "1px solid var(--background-modifier-border)";
-        nameInput.style.borderRadius = "var(--radius-s)";
-        nameInput.style.backgroundColor = "var(--background-primary)";
-        nameInput.style.color = "var(--text-normal)";
-        nameInput.onchange = async () => {
-          this.plugin.settings.dashboardCombinations[combinationIndex].name = nameInput.value;
-          await this.plugin.saveSettings();
-        };
-        const removeCombinationBtn = nameRow.createEl("button", { text: "\u5220\u9664\u7EC4\u5408" });
-        removeCombinationBtn.addClass("mod-warning");
-        removeCombinationBtn.onclick = async () => {
-          this.plugin.settings.dashboardCombinations.splice(combinationIndex, 1);
-          await this.plugin.saveSettings();
-          renderList();
-        };
-        const rulesLabel = card.createEl("div", { text: "\u89C4\u5219" });
-        rulesLabel.style.fontWeight = "var(--font-semibold)";
-        rulesLabel.style.color = "var(--text-normal)";
-        rulesLabel.style.marginBottom = "var(--size-4-2)";
-        const rulesContainer = card.createEl("div");
-        rulesContainer.style.display = "flex";
-        rulesContainer.style.flexDirection = "column";
-        rulesContainer.style.gap = "var(--size-4-2)";
-        rulesContainer.style.marginBottom = "var(--size-4-3)";
-        combination.rules.forEach((rule, ruleIndex) => {
-          const ruleRow = rulesContainer.createEl("div");
-          ruleRow.style.display = "flex";
-          ruleRow.style.gap = "var(--size-4-2)";
-          ruleRow.style.alignItems = "center";
-          const fieldInput = ruleRow.createEl("input");
-          fieldInput.type = "text";
-          fieldInput.placeholder = "\u5B57\u6BB5";
-          fieldInput.value = rule.field;
-          fieldInput.style.flex = "1";
-          fieldInput.style.padding = "var(--size-4-1) var(--size-4-2)";
-          fieldInput.style.border = "1px solid var(--background-modifier-border)";
-          fieldInput.style.borderRadius = "var(--radius-s)";
-          fieldInput.style.backgroundColor = "var(--background-primary)";
-          fieldInput.style.color = "var(--text-normal)";
-          fieldInput.onchange = async () => {
-            this.plugin.settings.dashboardCombinations[combinationIndex].rules[ruleIndex].field = fieldInput.value;
-            await this.plugin.saveSettings();
-          };
-          const equalsLabel = ruleRow.createEl("span", { text: "=" });
-          equalsLabel.style.color = "var(--text-muted)";
-          equalsLabel.style.fontWeight = "var(--font-semibold)";
-          const valueInput = ruleRow.createEl("input");
-          valueInput.type = "text";
-          valueInput.placeholder = "\u503C";
-          valueInput.value = rule.value;
-          valueInput.style.flex = "1";
-          valueInput.style.padding = "var(--size-4-1) var(--size-4-2)";
-          valueInput.style.border = "1px solid var(--background-modifier-border)";
-          valueInput.style.borderRadius = "var(--radius-s)";
-          valueInput.style.backgroundColor = "var(--background-primary)";
-          valueInput.style.color = "var(--text-normal)";
-          valueInput.onchange = async () => {
-            this.plugin.settings.dashboardCombinations[combinationIndex].rules[ruleIndex].value = valueInput.value;
-            await this.plugin.saveSettings();
-          };
-          const removeRuleBtn = ruleRow.createEl("button", { text: "\u5220\u9664" });
-          removeRuleBtn.addClass("mod-warning");
-          removeRuleBtn.onclick = async () => {
-            this.plugin.settings.dashboardCombinations[combinationIndex].rules.splice(ruleIndex, 1);
-            await this.plugin.saveSettings();
-            renderList();
-          };
-        });
-        const addRuleBtn = card.createEl("button", { text: "+ \u6DFB\u52A0\u89C4\u5219" });
-        addRuleBtn.addClass("mod-cta");
-        addRuleBtn.onclick = async () => {
-          this.plugin.settings.dashboardCombinations[combinationIndex].rules.push({ field: "", value: "" });
-          await this.plugin.saveSettings();
-          renderList();
-        };
-      });
-    };
-    renderList();
-    const addCombinationBtn = containerEl.createEl("button", { text: "+ \u6DFB\u52A0\u7EC4\u5408" });
-    addCombinationBtn.addClass("mod-cta");
-    addCombinationBtn.style.marginTop = "var(--size-4-2)";
-    addCombinationBtn.onclick = async () => {
-      const newCombination = {
-        name: "",
-        rules: [{ field: "", value: "" }]
-      };
-      this.plugin.settings.dashboardCombinations.push(newCombination);
-      await this.plugin.saveSettings();
-      renderList();
-    };
-  }
-};
-function parseCommaList(value) {
-  return value.split(",").map((item) => item.trim()).filter((item) => item.length > 0);
-}
-function parseLineList(value) {
-  return value.split("\n").map((item) => item.trim()).filter((item) => item.length > 0);
-}
-function parseRecord(value) {
-  const result = {};
-  for (const line of value.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed)
-      continue;
-    const separatorIndex = trimmed.indexOf("=");
-    if (separatorIndex === -1)
-      continue;
-    const key = trimmed.substring(0, separatorIndex).trim();
-    const val = trimmed.substring(separatorIndex + 1).trim();
-    if (key) {
-      result[key] = val || key;
-    }
-  }
-  return result;
-}
-function formatRecord(record) {
-  return Object.entries(record).map(([key, value]) => `${key}=${value}`).join("\n");
-}
-var FieldSourceModal = class extends import_obsidian.Modal {
-  constructor(app, field, files) {
-    super(app);
-    this.field = field;
-    this.files = files;
-  }
-  onOpen() {
-    const { contentEl } = this;
-    contentEl.empty();
-    contentEl.createEl("h2", { text: `\u5B57\u6BB5 "${this.field}" \u7684\u6765\u6E90\u6587\u4EF6` });
-    const desc = contentEl.createEl("p", {
-      text: `\u5171 ${this.files.length} \u4E2A\u6587\u4EF6\u5305\u542B\u6B64\u5B57\u6BB5\uFF1A`,
-      cls: "home-dashboard-scan-modal-desc"
-    });
-    desc.style.color = "var(--text-muted)";
-    desc.style.fontSize = "var(--font-smaller)";
-    const list = contentEl.createEl("ul", { cls: "home-dashboard-scan-source-list" });
-    for (const path of this.files) {
-      const li = list.createEl("li", { cls: "home-dashboard-scan-source-item" });
-      const link = li.createEl("a", {
-        text: path,
-        href: "#",
-        cls: "home-dashboard-scan-source-link"
-      });
-      link.onclick = (e) => {
-        e.preventDefault();
-        const file = this.app.vault.getAbstractFileByPath(path);
-        if (file instanceof import_obsidian.TFile) {
-          this.app.workspace.getLeaf().openFile(file);
-          this.close();
-        }
-      };
-    }
-  }
-  onClose() {
-    this.contentEl.empty();
-  }
-};
+var import_obsidian4 = require("obsidian");
 
 // src/view/HomeDashboardView.ts
-var import_obsidian4 = require("obsidian");
+var import_obsidian3 = require("obsidian");
 
 // src/types.ts
 var LAYOUT_OPTIONS = [
@@ -958,7 +495,7 @@ function renderEmpty4(container, message) {
 }
 
 // src/layouts/dashboard-renderer.ts
-var import_obsidian3 = require("obsidian");
+var import_obsidian2 = require("obsidian");
 
 // src/layouts/dashboard-helpers.ts
 function appendTag(container, label, value) {
@@ -1020,7 +557,7 @@ function hexToRgb(hex) {
 }
 
 // src/layouts/dashboard-field-renderer.ts
-var import_obsidian2 = require("obsidian");
+var import_obsidian = require("obsidian");
 function mergeSmallEntries(entries, threshold, otherLabel) {
   const big = entries.filter((e) => e.count >= threshold);
   const small = entries.filter((e) => e.count < threshold);
@@ -1421,7 +958,7 @@ function renderBubbleDistribution(container, entries, app, openNote) {
     hit.style.top = `${(circle.y - circle.r) / viewH * 100}%`;
     hit.style.width = `${circle.r * 2 / viewW * 100}%`;
     hit.style.aspectRatio = "1 / 1";
-    (0, import_obsidian2.setTooltip)(hit, `${circle.entry.key}: ${circle.entry.count}`, { placement: "top", delay: 0 });
+    (0, import_obsidian.setTooltip)(hit, `${circle.entry.key}: ${circle.entry.count}`, { placement: "top", delay: 0 });
     hit.addEventListener("mouseenter", () => {
       var _a;
       (_a = svg.querySelectorAll(".kd-bubble-circle")[index]) == null ? void 0 : _a.addClass("is-hovered");
@@ -1570,7 +1107,7 @@ function renderTreemapCell(container, entry, colorIndex, globalTotal, app, openN
     label.style.display = "none";
   }
   const displayCount = (_a = entry.actualCount) != null ? _a : entry.count;
-  (0, import_obsidian2.setTooltip)(cell, `${entry.key}: ${displayCount}`, { placement: "top", delay: 0 });
+  (0, import_obsidian.setTooltip)(cell, `${entry.key}: ${displayCount}`, { placement: "top", delay: 0 });
   cell.addEventListener("click", () => {
     showFieldModal(`\u7C7B\u578B \xB7 ${entry.key}`, entry.items, app, openNote);
   });
@@ -1631,7 +1168,7 @@ function showFieldModal(title, entries, app, openNote) {
   const titleRow = header.createDiv("home-dashboard-modal-title-row");
   titleRow.createEl("h3", { cls: "home-dashboard-modal-title", text: title });
   const sortButton = titleRow.createEl("button", { cls: "home-dashboard-modal-sort-button", title: "\u5207\u6362\u6392\u5E8F" });
-  (0, import_obsidian2.setIcon)(sortButton, "arrow-down-narrow-wide");
+  (0, import_obsidian.setIcon)(sortButton, "arrow-down-narrow-wide");
   const closeButton = header.createEl("button", { cls: "home-dashboard-modal-close", text: "\u2715" });
   const body = modal.createDiv("home-dashboard-modal-body");
   const seen = /* @__PURE__ */ new Set();
@@ -1678,7 +1215,7 @@ function showFieldModal(title, entries, app, openNote) {
   };
   sortButton.addEventListener("click", () => {
     isDesc = !isDesc;
-    (0, import_obsidian2.setIcon)(sortButton, isDesc ? "arrow-down-narrow-wide" : "arrow-up-narrow-wide");
+    (0, import_obsidian.setIcon)(sortButton, isDesc ? "arrow-down-narrow-wide" : "arrow-up-narrow-wide");
     renderList();
   });
   renderList();
@@ -2027,7 +1564,7 @@ function showDayModal(day, app, openNote) {
   const titleRow = header.createDiv("home-dashboard-modal-title-row");
   titleRow.createEl("h3", { cls: "home-dashboard-modal-title", text: `${day.dateKey} \u7684\u7B14\u8BB0` });
   const sortButton = titleRow.createEl("button", { cls: "home-dashboard-modal-sort-button", title: "\u5207\u6362\u6392\u5E8F" });
-  (0, import_obsidian3.setIcon)(sortButton, "arrow-down-narrow-wide");
+  (0, import_obsidian2.setIcon)(sortButton, "arrow-down-narrow-wide");
   const closeButton = header.createEl("button", { cls: "home-dashboard-modal-close", text: "\u2715" });
   const body = modal.createDiv("home-dashboard-modal-body");
   const seen = /* @__PURE__ */ new Set();
@@ -2074,7 +1611,7 @@ function showDayModal(day, app, openNote) {
   };
   sortButton.addEventListener("click", () => {
     isDesc = !isDesc;
-    (0, import_obsidian3.setIcon)(sortButton, isDesc ? "arrow-down-narrow-wide" : "arrow-up-narrow-wide");
+    (0, import_obsidian2.setIcon)(sortButton, isDesc ? "arrow-down-narrow-wide" : "arrow-up-narrow-wide");
     renderList();
   });
   renderList();
@@ -2214,12 +1751,13 @@ var RENDERERS = {
 
 // src/view/HomeDashboardView.ts
 var VIEW_TYPE_HOME_DASHBOARD = "home-dashboard";
-var HomeDashboardView = class extends import_obsidian4.ItemView {
+var HomeDashboardView = class extends import_obsidian3.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.container = null;
     this.searchKeyword = "";
     this.cssChangeTimer = null;
+    this.banner = null;
     this.plugin = plugin;
     this.aggregator = new NoteAggregator(
       this.app,
@@ -2240,7 +1778,9 @@ var HomeDashboardView = class extends import_obsidian4.ItemView {
     return "gauge";
   }
   async onOpen() {
-    this.renderBanner();
+    if (this.plugin.settings.showBannerImage) {
+      this.renderBanner();
+    }
     this.container = this.contentEl.createDiv("home-dashboard-container");
     await this.render();
     this.registerEvent(
@@ -2262,6 +1802,7 @@ var HomeDashboardView = class extends import_obsidian4.ItemView {
     }
     this.contentEl.empty();
     this.container = null;
+    this.banner = null;
     this.clearOrphanedTooltips();
   }
   async render() {
@@ -2329,6 +1870,7 @@ var HomeDashboardView = class extends import_obsidian4.ItemView {
     const seed = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
     const bannerUrl = `https://picsum.photos/seed/${seed}/1600/400`;
     const banner = this.contentEl.createDiv("home-dashboard-banner");
+    this.banner = banner;
     const img = banner.createEl("img", {
       cls: "home-dashboard-banner-image",
       attr: { src: bannerUrl, alt: "\u6BCF\u65E5\u5C01\u9762" }
@@ -2339,6 +1881,16 @@ var HomeDashboardView = class extends import_obsidian4.ItemView {
     img.addEventListener("error", () => {
       img.classList.add("is-error");
     });
+  }
+  updateBannerVisibility() {
+    if (this.plugin.settings.showBannerImage) {
+      if (!this.banner) {
+        this.renderBanner();
+      }
+    } else if (this.banner) {
+      this.banner.remove();
+      this.banner = null;
+    }
   }
   renderResult(result) {
     var _a;
@@ -2388,6 +1940,482 @@ var HomeDashboardView = class extends import_obsidian4.ItemView {
   }
   clearOrphanedTooltips() {
     document.querySelectorAll(".home-dashboard-heatmap-tooltip").forEach((el) => el.remove());
+  }
+};
+
+// src/settings/settings.ts
+var SETTING_TABS = ["\u901A\u7528", "\u5B57\u6BB5\u914D\u7F6E", "\u6570\u636E\u7EC4\u5408", "\u7248\u672C\u66F4\u65B0"];
+var DEFAULT_SETTINGS = {
+  homeViewTitle: "FutureLAB",
+  aggregatedFields: ["\u4F5C\u8005", "\u521B\u5EFA\u65F6\u95F4", "\u9879\u76EE", "\u7C7B\u578B"],
+  fieldAliases: {},
+  dateFields: ["\u521B\u5EFA\u65F6\u95F4"],
+  dashboardCombinations: [],
+  autoUpdate: true,
+  heatmapColor: "#28B80F",
+  fieldDistributionColor: "#B01111",
+  autoOpenOnStartup: true,
+  showBannerImage: false,
+  excludedProjects: [],
+  excludedTypes: ["git\u65E5\u62A5"]
+};
+var HomeDashboardSettingTab = class extends import_obsidian4.PluginSettingTab {
+  constructor(app, plugin) {
+    super(app, plugin);
+    this.isCheckingUpdate = false;
+    this.isUpdating = false;
+    this.updateProgress = 0;
+    this.updateResultMessage = "";
+    this.latestVersion = "";
+    this.activeTab = "\u901A\u7528";
+    this.plugin = plugin;
+  }
+  display() {
+    const { containerEl } = this;
+    containerEl.empty();
+    this.renderTabs(containerEl);
+    const contentEl = containerEl.createDiv({ cls: "home-dashboard-tab-content" });
+    switch (this.activeTab) {
+      case "\u901A\u7528":
+        this.renderGeneralSettings(contentEl);
+        break;
+      case "\u5B57\u6BB5\u914D\u7F6E":
+        this.renderFieldConfig(contentEl);
+        break;
+      case "\u6570\u636E\u7EC4\u5408":
+        this.renderCombinationsSection(contentEl);
+        break;
+      case "\u7248\u672C\u66F4\u65B0":
+        this.renderVersionUpdateSection(contentEl);
+        break;
+    }
+  }
+  renderTabs(containerEl) {
+    const tabsEl = containerEl.createDiv({ cls: "home-dashboard-tabs" });
+    for (const tabId of SETTING_TABS) {
+      const button = tabsEl.createEl("button", {
+        cls: `home-dashboard-tab ${tabId === this.activeTab ? "is-active" : ""}`,
+        text: tabId
+      });
+      button.onclick = () => {
+        this.activeTab = tabId;
+        this.display();
+      };
+    }
+  }
+  renderGeneralSettings(contentEl) {
+    new import_obsidian4.Setting(contentEl).setName("\u663E\u793A\u4E3B\u9875\u5C01\u9762\u56FE").setDesc("\u5728\u4E3B\u9875\u9876\u90E8\u663E\u793A\u6BCF\u65E5\u968F\u673A\u5C01\u9762 banner\uFF08\u9ED8\u8BA4\u5173\u95ED\uFF09\u3002").addToggle(
+      (toggle) => toggle.setValue(this.plugin.settings.showBannerImage).onChange(async (value) => {
+        this.plugin.settings.showBannerImage = value;
+        await this.plugin.saveSettings();
+        const activeView = this.app.workspace.getActiveViewOfType(HomeDashboardView);
+        if (activeView) {
+          activeView.updateBannerVisibility();
+        }
+      })
+    );
+    new import_obsidian4.Setting(contentEl).setName("\u81EA\u52A8\u6253\u5F00 Dashboard").setDesc("\u6BCF\u6B21\u542F\u52A8 Obsidian \u6216\u6BCF\u5929\u9996\u6B21\u5207\u56DE\u65F6\u81EA\u52A8\u8FDB\u5165 Dashboard\u3002").addToggle(
+      (toggle) => toggle.setValue(this.plugin.settings.autoOpenOnStartup).onChange(async (value) => {
+        this.plugin.settings.autoOpenOnStartup = value;
+        await this.plugin.saveSettings();
+      })
+    );
+    new import_obsidian4.Setting(contentEl).setName("\u4E3B\u9875\u6807\u9898").setDesc("\u81EA\u5B9A\u4E49\u4E3B\u9875\u89C6\u56FE\u7684\u6807\u9898").addText(
+      (text) => text.setPlaceholder("\u4E3B\u9875").setValue(this.plugin.settings.homeViewTitle).onChange(async (value) => {
+        this.plugin.settings.homeViewTitle = value || "\u4E3B\u9875";
+        await this.plugin.saveSettings();
+      })
+    );
+    new import_obsidian4.Setting(contentEl).setName("\u70ED\u529B\u56FE\u989C\u8272").setDesc("\u65E5\u671F\u70ED\u529B\u56FE\u65B9\u5757\u7684\u57FA\u7840\u989C\u8272").addColorPicker(
+      (color) => color.setValue(this.plugin.settings.heatmapColor).onChange(async (value) => {
+        this.plugin.settings.heatmapColor = value;
+        await this.plugin.saveSettings();
+      })
+    );
+    new import_obsidian4.Setting(contentEl).setName("\u5B57\u6BB5\u5206\u5E03\u4E3B\u8272").setDesc("\u5B57\u6BB5\u5206\u5E03\u56FE\u8868\uFF08\u80FD\u529B\u8005\u3001\u9879\u76EE\u3001\u7C7B\u578B\uFF09\u4E2D\u4F7F\u7528\u7684\u4E3B\u8272").addColorPicker(
+      (color) => color.setValue(this.plugin.settings.fieldDistributionColor).onChange(async (value) => {
+        this.plugin.settings.fieldDistributionColor = value;
+        await this.plugin.saveSettings();
+      })
+    );
+  }
+  renderFieldConfig(contentEl) {
+    new import_obsidian4.Setting(contentEl).setName("\u6C47\u603B\u5B57\u6BB5").setDesc("\u8F93\u5165\u9700\u8981\u6C47\u603B\u7684 YAML frontmatter \u5B57\u6BB5\u540D\uFF0C\u7528\u82F1\u6587\u9017\u53F7\u5206\u9694\uFF08\u5982 date, author, project, type\uFF09").addTextArea((text) => {
+      text.setPlaceholder("date, author, project, type").setValue(this.plugin.settings.aggregatedFields.join(", ")).onChange(async (value) => {
+        this.plugin.settings.aggregatedFields = parseCommaList(value);
+        await this.plugin.saveSettings();
+      });
+      text.inputEl.rows = 3;
+    });
+    new import_obsidian4.Setting(contentEl).setName("\u5B57\u6BB5\u522B\u540D").setDesc("\u6BCF\u884C\u4E00\u4E2A\u6620\u5C04\uFF0C\u683C\u5F0F\uFF1A\u5B57\u6BB5\u540D=\u663E\u793A\u540D\uFF08\u5982 date=\u65E5\u671F\uFF09\u3002\u672A\u914D\u7F6E\u7684\u5B57\u6BB5\u5C06\u663E\u793A\u539F\u5B57\u6BB5\u540D\u3002").addTextArea((text) => {
+      text.setPlaceholder("date=\u65E5\u671F\nauthor=\u4F5C\u8005").setValue(formatRecord(this.plugin.settings.fieldAliases)).onChange(async (value) => {
+        this.plugin.settings.fieldAliases = parseRecord(value);
+        await this.plugin.saveSettings();
+      });
+      text.inputEl.rows = 5;
+    });
+    new import_obsidian4.Setting(contentEl).setName("\u65E5\u671F\u5B57\u6BB5").setDesc("\u54EA\u4E9B\u5B57\u6BB5\u9700\u8981\u6309\u5E74/\u6708\u805A\u5408\uFF1F\u6BCF\u884C\u4E00\u4E2A\u5B57\u6BB5\u540D\uFF08\u901A\u5E38\u5305\u542B date\uFF09").addTextArea((text) => {
+      text.setPlaceholder("date").setValue(this.plugin.settings.dateFields.join("\n")).onChange(async (value) => {
+        this.plugin.settings.dateFields = parseLineList(value);
+        await this.plugin.saveSettings();
+      });
+      text.inputEl.rows = 3;
+    });
+    new import_obsidian4.Setting(contentEl).setName("\u6392\u9664\u9879\u76EE").setDesc("\u6574\u4F53\u8BA1\u7B97\u65F6\u6392\u9664\u8FD9\u4E9B\u9879\u76EE\u5BF9\u5E94\u7684\u6587\u6863\u3002\u6BCF\u884C\u4E00\u4E2A\u9879\u76EE\u540D\u79F0\u3002").addTextArea((text) => {
+      text.setPlaceholder("\u4F8B\u5982\uFF1A\u5F52\u6863\\n\u4E34\u65F6").setValue(this.plugin.settings.excludedProjects.join("\n")).onChange(async (value) => {
+        this.plugin.settings.excludedProjects = parseLineList(value);
+        await this.plugin.saveSettings();
+      });
+      text.inputEl.rows = 3;
+    });
+    new import_obsidian4.Setting(contentEl).setName("\u6392\u9664\u7C7B\u578B").setDesc("\u6574\u4F53\u8BA1\u7B97\u65F6\u6392\u9664\u8FD9\u4E9B\u7C7B\u578B\u7684\u6587\u6863\u3002\u6BCF\u884C\u4E00\u4E2A\u7C7B\u578B\u540D\u79F0\u3002").addTextArea((text) => {
+      text.setPlaceholder("\u4F8B\u5982\uFF1Agit\u65E5\u62A5").setValue(this.plugin.settings.excludedTypes.join("\n")).onChange(async (value) => {
+        this.plugin.settings.excludedTypes = parseLineList(value);
+        await this.plugin.saveSettings();
+      });
+      text.inputEl.rows = 3;
+    });
+    this.renderScanSection(contentEl);
+  }
+  renderVersionUpdateSection(containerEl) {
+    containerEl.createEl("h2", { text: "\u7248\u672C\u66F4\u65B0" });
+    containerEl.createEl("h3", { text: "homepage-dashboard" });
+    containerEl.createDiv({
+      cls: "auto-frontmatter-about-version",
+      text: `\u5F53\u524D\u7248\u672C\uFF1A${this.plugin.manifest.version}`
+    });
+    const actionEl = containerEl.createDiv({ cls: "auto-frontmatter-about-action" });
+    const checkButton = actionEl.createEl("button", {
+      cls: "mod-cta auto-frontmatter-about-check-btn",
+      text: this.isCheckingUpdate ? "\u68C0\u67E5\u4E2D..." : "\u68C0\u67E5\u66F4\u65B0"
+    });
+    checkButton.disabled = this.isCheckingUpdate || this.isUpdating;
+    checkButton.onclick = async () => {
+      this.isCheckingUpdate = true;
+      this.updateResultMessage = "";
+      this.latestVersion = "";
+      this.display();
+      const result = await this.plugin.checkForUpdate();
+      this.isCheckingUpdate = false;
+      if (result.error === "not_found") {
+        new import_obsidian4.Notice("\u672A\u627E\u5230\u8FDC\u7AEF\u4ED3\u5E93\uFF0C\u8BF7\u68C0\u67E5\u7F51\u7EDC");
+        this.updateResultMessage = "\u672A\u627E\u5230\u8FDC\u7AEF\u4ED3\u5E93\uFF0C\u8BF7\u68C0\u67E5\u7F51\u7EDC";
+      } else if (result.error) {
+        new import_obsidian4.Notice(result.error);
+        this.updateResultMessage = result.error;
+      } else if (result.hasUpdate) {
+        this.latestVersion = result.version;
+        this.updateResultMessage = `\u{1F504} \u53D1\u73B0\u65B0\u7248\u672C\uFF1A${result.version}\uFF08\u5F53\u524D ${this.plugin.manifest.version}\uFF09`;
+      } else {
+        this.updateResultMessage = `\u2705 \u5F53\u524D\u5DF2\u662F\u6700\u65B0\u7248\u672C\uFF08${this.plugin.manifest.version}\uFF09`;
+      }
+      this.display();
+    };
+    if (this.updateResultMessage) {
+      const resultEl = containerEl.createDiv({ cls: "auto-frontmatter-about-result" });
+      resultEl.createDiv({ text: this.updateResultMessage });
+      if (this.latestVersion) {
+        const updateButton = resultEl.createEl("button", {
+          cls: "mod-cta auto-frontmatter-about-update-btn",
+          text: this.isUpdating ? `\u66F4\u65B0\u4E2D...\uFF08${this.updateProgress}/3\uFF09` : "\u7ACB\u5373\u66F4\u65B0"
+        });
+        updateButton.disabled = this.isUpdating;
+        updateButton.onclick = async () => {
+          this.isUpdating = true;
+          this.updateProgress = 0;
+          this.display();
+          try {
+            await this.plugin.performUpdate(this.latestVersion, (step, total) => {
+              this.updateProgress = step;
+              this.display();
+            });
+            this.isUpdating = false;
+            this.latestVersion = "";
+            this.updateResultMessage = "";
+          } catch (error) {
+            this.isUpdating = false;
+            new import_obsidian4.Notice(`\u66F4\u65B0\u5931\u8D25\uFF1A${error}`);
+            this.updateResultMessage = `\u66F4\u65B0\u5931\u8D25\uFF1A${error}`;
+          }
+          this.display();
+        };
+      }
+    }
+    containerEl.createEl("h3", { text: "\u81EA\u52A8\u66F4\u65B0", cls: "auto-frontmatter-about-config-title" });
+    new import_obsidian4.Setting(containerEl).setName("\u81EA\u52A8\u68C0\u67E5\u66F4\u65B0").setDesc("\u6BCF 60 \u5206\u949F\u81EA\u52A8\u68C0\u67E5\u5E76\u66F4\u65B0\u5230\u6700\u65B0\u7248\u672C\u3002").addToggle(
+      (toggle) => toggle.setValue(this.plugin.settings.autoUpdate).onChange(async (value) => {
+        this.plugin.settings.autoUpdate = value;
+        await this.plugin.saveSettings();
+      })
+    );
+  }
+  renderScanSection(containerEl) {
+    const scanContainer = containerEl.createEl("div");
+    scanContainer.style.marginBottom = "var(--size-4-3)";
+    const header = scanContainer.createEl("div");
+    header.style.display = "flex";
+    header.style.justifyContent = "space-between";
+    header.style.alignItems = "center";
+    header.style.marginBottom = "var(--size-4-2)";
+    const title = header.createEl("h3", { text: "\u626B\u63CF\u4ED3\u5E93\u5B57\u6BB5" });
+    title.style.margin = "0";
+    const resultContainer = scanContainer.createEl("div");
+    resultContainer.style.display = "flex";
+    resultContainer.style.flexWrap = "wrap";
+    resultContainer.style.gap = "var(--size-4-2)";
+    const scanButton = header.createEl("button", { text: "\u626B\u63CF\u5B57\u6BB5" });
+    scanButton.addClass("mod-cta");
+    scanButton.onclick = async () => {
+      scanButton.setText("\u626B\u63CF\u4E2D...");
+      scanButton.disabled = true;
+      const results = await this.scanFields();
+      scanButton.setText("\u626B\u63CF\u5B57\u6BB5");
+      scanButton.disabled = false;
+      resultContainer.empty();
+      if (results.length === 0) {
+        resultContainer.createEl("span", {
+          text: "\u672A\u627E\u5230\u4EFB\u4F55 frontmatter \u5B57\u6BB5\u3002",
+          cls: "home-dashboard-scan-empty"
+        });
+        return;
+      }
+      for (const { field, files } of results) {
+        const isSelected = this.plugin.settings.aggregatedFields.includes(field);
+        const item = resultContainer.createEl("div", {
+          cls: "home-dashboard-scan-item"
+        });
+        const tag = item.createEl("button", {
+          text: field,
+          cls: `home-dashboard-scan-tag ${isSelected ? "is-selected" : ""}`
+        });
+        tag.disabled = isSelected;
+        tag.title = isSelected ? "\u5DF2\u6DFB\u52A0\u5230\u6C47\u603B\u5B57\u6BB5" : "\u70B9\u51FB\u6DFB\u52A0\u5230\u6C47\u603B\u5B57\u6BB5";
+        tag.onclick = async () => {
+          if (!this.plugin.settings.aggregatedFields.includes(field)) {
+            this.plugin.settings.aggregatedFields.push(field);
+            await this.plugin.saveSettings();
+            this.display();
+          }
+        };
+        if (files.length > 0) {
+          const sourceBtn = item.createEl("button", {
+            text: String(files.length),
+            cls: "home-dashboard-scan-source-btn"
+          });
+          sourceBtn.title = "\u67E5\u770B\u6765\u6E90\u6587\u4EF6";
+          sourceBtn.onclick = (e) => {
+            e.stopPropagation();
+            new FieldSourceModal(this.app, field, files).open();
+          };
+        }
+      }
+    };
+  }
+  async scanFields() {
+    const fieldMap = /* @__PURE__ */ new Map();
+    const files = this.app.vault.getMarkdownFiles();
+    for (const file of files) {
+      const cache = this.app.metadataCache.getFileCache(file);
+      if (cache == null ? void 0 : cache.frontmatter) {
+        for (const key of Object.keys(cache.frontmatter)) {
+          if (!fieldMap.has(key)) {
+            fieldMap.set(key, /* @__PURE__ */ new Set());
+          }
+          fieldMap.get(key).add(file.path);
+        }
+      }
+    }
+    return Array.from(fieldMap.entries()).map(([field, fileSet]) => ({ field, files: Array.from(fileSet).sort() })).sort((a, b) => a.field.localeCompare(b.field));
+  }
+  renderCombinationsSection(containerEl) {
+    containerEl.createEl("h3", { text: "\u6570\u636E\u7EC4\u5408" });
+    const descEl = containerEl.createEl("p", {
+      text: "\u914D\u7F6E\u591A\u7EC4\u7EC4\u5408\u89C4\u5219\u3002\u6BCF\u7EC4\u7EC4\u5408\u5305\u542B\u4E00\u4E2A\u540D\u79F0\u548C\u591A\u4E2A\u300C\u5B57\u6BB5=\u503C\u300D\u89C4\u5219\uFF0C\u7528\u4E8E\u5728\u770B\u677F\u4E2D\u7B5B\u9009\u548C\u5C55\u793A\u6570\u636E\u3002"
+    });
+    descEl.style.color = "var(--text-muted)";
+    descEl.style.fontSize = "var(--font-smaller)";
+    descEl.style.marginBottom = "var(--size-4-3)";
+    const listContainer = containerEl.createEl("div");
+    listContainer.style.display = "flex";
+    listContainer.style.flexDirection = "column";
+    listContainer.style.gap = "var(--size-4-3)";
+    const renderList = () => {
+      listContainer.empty();
+      this.plugin.settings.dashboardCombinations.forEach((combination, combinationIndex) => {
+        const card = listContainer.createEl("div");
+        card.style.border = "1px solid var(--background-modifier-border)";
+        card.style.borderRadius = "var(--radius-s)";
+        card.style.padding = "var(--size-4-3)";
+        card.style.backgroundColor = "var(--background-primary-alt)";
+        const nameRow = card.createEl("div");
+        nameRow.style.display = "flex";
+        nameRow.style.gap = "var(--size-4-2)";
+        nameRow.style.alignItems = "center";
+        nameRow.style.marginBottom = "var(--size-4-3)";
+        const nameLabel = nameRow.createEl("label", { text: "\u7EC4\u5408\u540D\u79F0" });
+        nameLabel.style.fontWeight = "var(--font-semibold)";
+        nameLabel.style.color = "var(--text-normal)";
+        nameLabel.style.minWidth = "80px";
+        const nameInput = nameRow.createEl("input");
+        nameInput.type = "text";
+        nameInput.placeholder = "\u4F8B\u5982\uFF1A\u6700\u8FD1\u66F4\u65B0";
+        nameInput.value = combination.name;
+        nameInput.style.flex = "1";
+        nameInput.style.padding = "var(--size-4-1) var(--size-4-2)";
+        nameInput.style.border = "1px solid var(--background-modifier-border)";
+        nameInput.style.borderRadius = "var(--radius-s)";
+        nameInput.style.backgroundColor = "var(--background-primary)";
+        nameInput.style.color = "var(--text-normal)";
+        nameInput.onchange = async () => {
+          this.plugin.settings.dashboardCombinations[combinationIndex].name = nameInput.value;
+          await this.plugin.saveSettings();
+        };
+        const removeCombinationBtn = nameRow.createEl("button", { text: "\u5220\u9664\u7EC4\u5408" });
+        removeCombinationBtn.addClass("mod-warning");
+        removeCombinationBtn.onclick = async () => {
+          this.plugin.settings.dashboardCombinations.splice(combinationIndex, 1);
+          await this.plugin.saveSettings();
+          renderList();
+        };
+        const rulesLabel = card.createEl("div", { text: "\u89C4\u5219" });
+        rulesLabel.style.fontWeight = "var(--font-semibold)";
+        rulesLabel.style.color = "var(--text-normal)";
+        rulesLabel.style.marginBottom = "var(--size-4-2)";
+        const rulesContainer = card.createEl("div");
+        rulesContainer.style.display = "flex";
+        rulesContainer.style.flexDirection = "column";
+        rulesContainer.style.gap = "var(--size-4-2)";
+        rulesContainer.style.marginBottom = "var(--size-4-3)";
+        combination.rules.forEach((rule, ruleIndex) => {
+          const ruleRow = rulesContainer.createEl("div");
+          ruleRow.style.display = "flex";
+          ruleRow.style.gap = "var(--size-4-2)";
+          ruleRow.style.alignItems = "center";
+          const fieldInput = ruleRow.createEl("input");
+          fieldInput.type = "text";
+          fieldInput.placeholder = "\u5B57\u6BB5";
+          fieldInput.value = rule.field;
+          fieldInput.style.flex = "1";
+          fieldInput.style.padding = "var(--size-4-1) var(--size-4-2)";
+          fieldInput.style.border = "1px solid var(--background-modifier-border)";
+          fieldInput.style.borderRadius = "var(--radius-s)";
+          fieldInput.style.backgroundColor = "var(--background-primary)";
+          fieldInput.style.color = "var(--text-normal)";
+          fieldInput.onchange = async () => {
+            this.plugin.settings.dashboardCombinations[combinationIndex].rules[ruleIndex].field = fieldInput.value;
+            await this.plugin.saveSettings();
+          };
+          const equalsLabel = ruleRow.createEl("span", { text: "=" });
+          equalsLabel.style.color = "var(--text-muted)";
+          equalsLabel.style.fontWeight = "var(--font-semibold)";
+          const valueInput = ruleRow.createEl("input");
+          valueInput.type = "text";
+          valueInput.placeholder = "\u503C";
+          valueInput.value = rule.value;
+          valueInput.style.flex = "1";
+          valueInput.style.padding = "var(--size-4-1) var(--size-4-2)";
+          valueInput.style.border = "1px solid var(--background-modifier-border)";
+          valueInput.style.borderRadius = "var(--radius-s)";
+          valueInput.style.backgroundColor = "var(--background-primary)";
+          valueInput.style.color = "var(--text-normal)";
+          valueInput.onchange = async () => {
+            this.plugin.settings.dashboardCombinations[combinationIndex].rules[ruleIndex].value = valueInput.value;
+            await this.plugin.saveSettings();
+          };
+          const removeRuleBtn = ruleRow.createEl("button", { text: "\u5220\u9664" });
+          removeRuleBtn.addClass("mod-warning");
+          removeRuleBtn.onclick = async () => {
+            this.plugin.settings.dashboardCombinations[combinationIndex].rules.splice(ruleIndex, 1);
+            await this.plugin.saveSettings();
+            renderList();
+          };
+        });
+        const addRuleBtn = card.createEl("button", { text: "+ \u6DFB\u52A0\u89C4\u5219" });
+        addRuleBtn.addClass("mod-cta");
+        addRuleBtn.onclick = async () => {
+          this.plugin.settings.dashboardCombinations[combinationIndex].rules.push({ field: "", value: "" });
+          await this.plugin.saveSettings();
+          renderList();
+        };
+      });
+    };
+    renderList();
+    const addCombinationBtn = containerEl.createEl("button", { text: "+ \u6DFB\u52A0\u7EC4\u5408" });
+    addCombinationBtn.addClass("mod-cta");
+    addCombinationBtn.style.marginTop = "var(--size-4-2)";
+    addCombinationBtn.onclick = async () => {
+      const newCombination = {
+        name: "",
+        rules: [{ field: "", value: "" }]
+      };
+      this.plugin.settings.dashboardCombinations.push(newCombination);
+      await this.plugin.saveSettings();
+      renderList();
+    };
+  }
+};
+function parseCommaList(value) {
+  return value.split(",").map((item) => item.trim()).filter((item) => item.length > 0);
+}
+function parseLineList(value) {
+  return value.split("\n").map((item) => item.trim()).filter((item) => item.length > 0);
+}
+function parseRecord(value) {
+  const result = {};
+  for (const line of value.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed)
+      continue;
+    const separatorIndex = trimmed.indexOf("=");
+    if (separatorIndex === -1)
+      continue;
+    const key = trimmed.substring(0, separatorIndex).trim();
+    const val = trimmed.substring(separatorIndex + 1).trim();
+    if (key) {
+      result[key] = val || key;
+    }
+  }
+  return result;
+}
+function formatRecord(record) {
+  return Object.entries(record).map(([key, value]) => `${key}=${value}`).join("\n");
+}
+var FieldSourceModal = class extends import_obsidian4.Modal {
+  constructor(app, field, files) {
+    super(app);
+    this.field = field;
+    this.files = files;
+  }
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.empty();
+    contentEl.createEl("h2", { text: `\u5B57\u6BB5 "${this.field}" \u7684\u6765\u6E90\u6587\u4EF6` });
+    const desc = contentEl.createEl("p", {
+      text: `\u5171 ${this.files.length} \u4E2A\u6587\u4EF6\u5305\u542B\u6B64\u5B57\u6BB5\uFF1A`,
+      cls: "home-dashboard-scan-modal-desc"
+    });
+    desc.style.color = "var(--text-muted)";
+    desc.style.fontSize = "var(--font-smaller)";
+    const list = contentEl.createEl("ul", { cls: "home-dashboard-scan-source-list" });
+    for (const path of this.files) {
+      const li = list.createEl("li", { cls: "home-dashboard-scan-source-item" });
+      const link = li.createEl("a", {
+        text: path,
+        href: "#",
+        cls: "home-dashboard-scan-source-link"
+      });
+      link.onclick = (e) => {
+        e.preventDefault();
+        const file = this.app.vault.getAbstractFileByPath(path);
+        if (file instanceof import_obsidian4.TFile) {
+          this.app.workspace.getLeaf().openFile(file);
+          this.close();
+        }
+      };
+    }
+  }
+  onClose() {
+    this.contentEl.empty();
   }
 };
 
