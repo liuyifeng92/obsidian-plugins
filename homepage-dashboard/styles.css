@@ -199,8 +199,8 @@
 	position: relative;
 	width: 100%;
 	max-width: 1400px;
-	height: clamp(180px, 22vw, 220px);
-	margin: 0 auto 28px;
+	height: clamp(220px, 28vw, 280px);
+	margin: 0 auto 16px;
 	padding: 0 28px;
 	box-sizing: border-box;
 	overflow: hidden;
@@ -273,6 +273,33 @@
 		transparent 0%,
 		black 55%,
 		black 100%
+	);
+}
+
+/* Soft color glow over the transition area — makes the fade feel warmer */
+.home-dashboard-banner::after {
+	content: "";
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	height: 45%;
+	z-index: 2;
+	pointer-events: none;
+	background: linear-gradient(
+		to bottom,
+		transparent 0%,
+		rgba(215, 195, 175, 0.14) 55%,
+		transparent 100%
+	);
+}
+
+.theme-dark .home-dashboard-banner::after {
+	background: linear-gradient(
+		to bottom,
+		transparent 0%,
+		rgba(255, 210, 180, 0.06) 55%,
+		transparent 100%
 	);
 }
 
