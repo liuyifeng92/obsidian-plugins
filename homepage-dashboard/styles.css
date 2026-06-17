@@ -163,7 +163,7 @@
 }
 
 .theme-dark .kd-field-tab.is-active::after {
-	background-color: var(--kd-brand-red);
+	background-color: var(--kd-text-secondary);
 }
 
 .theme-dark .home-dashboard-heatmap-cell,
@@ -347,7 +347,8 @@
 
 .kd-heatmap-section,
 .kd-field-section {
-	border-color: transparent;
+	border: none;
+	padding: 22px;
 }
 
 .home-dashboard-sections-wrapper {
@@ -742,13 +743,13 @@
 }
 
 .kd-field-tab:hover {
-	color: var(--kd-ink);
+	color: var(--kd-text-secondary);
 	opacity: 1;
 }
 
 .kd-field-tab.is-active {
 	position: relative;
-	color: var(--kd-ink);
+	color: var(--kd-text-secondary);
 	font-weight: 900;
 	opacity: 1;
 }
@@ -761,7 +762,7 @@
 	transform: translateX(-50%);
 	width: 30%;
 	height: 4px;
-	background-color: var(--kd-ink);
+	background-color: var(--kd-text-secondary);
 	border-radius: 9999px;
 }
 
