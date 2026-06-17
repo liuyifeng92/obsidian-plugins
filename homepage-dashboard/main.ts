@@ -57,19 +57,6 @@ export default class HomeDashboardPlugin extends Plugin {
 			this.openHomeDashboard();
 		});
 
-		// 自动刷新：监听笔记元数据变更与增删改，防抖刷新当前主页视图
-		this.registerEvent(
-			this.app.metadataCache.on("changed", () => this.debouncedRefresh())
-		);
-		this.registerEvent(
-			this.app.vault.on("create", () => this.debouncedRefresh())
-		);
-		this.registerEvent(
-			this.app.vault.on("delete", () => this.debouncedRefresh())
-		);
-		this.registerEvent(
-			this.app.vault.on("rename", () => this.debouncedRefresh())
-		);
 	}
 
 	onunload(): void {

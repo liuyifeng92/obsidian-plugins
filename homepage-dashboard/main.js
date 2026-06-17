@@ -2219,6 +2219,7 @@ var HomeDashboardView = class extends import_obsidian4.ItemView {
     super(leaf);
     this.container = null;
     this.searchKeyword = "";
+    this.cssChangeTimer = null;
     this.plugin = plugin;
     this.aggregator = new NoteAggregator(
       this.app,
@@ -2241,8 +2242,23 @@ var HomeDashboardView = class extends import_obsidian4.ItemView {
   async onOpen() {
     this.container = this.contentEl.createDiv("home-dashboard-container");
     await this.render();
+    this.registerEvent(
+      this.app.workspace.on("css-change", () => {
+        if (this.cssChangeTimer !== null) {
+          window.clearTimeout(this.cssChangeTimer);
+        }
+        this.cssChangeTimer = window.setTimeout(() => {
+          this.cssChangeTimer = null;
+          void this.render();
+        }, 150);
+      })
+    );
   }
   async onClose() {
+    if (this.cssChangeTimer !== null) {
+      window.clearTimeout(this.cssChangeTimer);
+      this.cssChangeTimer = null;
+    }
     this.contentEl.empty();
     this.container = null;
     this.clearOrphanedTooltips();
@@ -2401,18 +2417,6 @@ var HomeDashboardPlugin = class extends import_obsidian5.Plugin {
     this.addRibbonIcon("gauge", "\u6253\u5F00\u4E3B\u9875", () => {
       this.openHomeDashboard();
     });
-    this.registerEvent(
-      this.app.metadataCache.on("changed", () => this.debouncedRefresh())
-    );
-    this.registerEvent(
-      this.app.vault.on("create", () => this.debouncedRefresh())
-    );
-    this.registerEvent(
-      this.app.vault.on("delete", () => this.debouncedRefresh())
-    );
-    this.registerEvent(
-      this.app.vault.on("rename", () => this.debouncedRefresh())
-    );
   }
   onunload() {
     this.app.workspace.detachLeavesOfType(VIEW_TYPE_HOME_DASHBOARD);

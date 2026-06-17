@@ -11,6 +11,7 @@ export class HomeDashboardView extends ItemView {
 	aggregator: NoteAggregator;
 	searchKeyword: string = "";
 	currentLayout: DashboardLayout;
+	private cssChangeTimer: number | null = null;
 
 	constructor(leaf: WorkspaceLeaf, plugin: HomeDashboardPluginLike) {
 		super(leaf);
@@ -40,9 +41,25 @@ export class HomeDashboardView extends ItemView {
 	async onOpen(): Promise<void> {
 		this.container = this.contentEl.createDiv("home-dashboard-container");
 		await this.render();
+
+		this.registerEvent(
+			this.app.workspace.on("css-change", () => {
+				if (this.cssChangeTimer !== null) {
+					window.clearTimeout(this.cssChangeTimer);
+				}
+				this.cssChangeTimer = window.setTimeout(() => {
+					this.cssChangeTimer = null;
+					void this.render();
+				}, 150);
+			})
+		);
 	}
 
 	async onClose(): Promise<void> {
+		if (this.cssChangeTimer !== null) {
+			window.clearTimeout(this.cssChangeTimer);
+			this.cssChangeTimer = null;
+		}
 		this.contentEl.empty();
 		this.container = null;
 		this.clearOrphanedTooltips();

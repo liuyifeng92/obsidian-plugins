@@ -175,6 +175,10 @@
 	border-color: var(--background-modifier-border);
 }
 
+.theme-dark .kd-legend-swatch {
+	border-color: transparent;
+}
+
 /* ---------------------------------------------------------
    1. Container
    --------------------------------------------------------- */
