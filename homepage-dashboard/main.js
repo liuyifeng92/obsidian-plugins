@@ -1870,6 +1870,7 @@ var HomeDashboardView = class extends import_obsidian3.ItemView {
     const seed = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
     const bannerUrl = `https://picsum.photos/seed/${seed}/1600/400`;
     const banner = this.contentEl.createDiv("home-dashboard-banner");
+    this.contentEl.prepend(banner);
     this.banner = banner;
     const img = banner.createEl("img", {
       cls: "home-dashboard-banner-image",

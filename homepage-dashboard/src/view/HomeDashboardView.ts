@@ -147,6 +147,7 @@ export class HomeDashboardView extends ItemView {
 		const bannerUrl = `https://picsum.photos/seed/${seed}/1600/400`;
 
 		const banner = this.contentEl.createDiv("home-dashboard-banner");
+		this.contentEl.prepend(banner);
 		this.banner = banner;
 
 		const img = banner.createEl("img", {
