@@ -2240,6 +2240,7 @@ var HomeDashboardView = class extends import_obsidian4.ItemView {
     return "gauge";
   }
   async onOpen() {
+    this.renderBanner();
     this.container = this.contentEl.createDiv("home-dashboard-container");
     await this.render();
     this.registerEvent(
@@ -2269,7 +2270,6 @@ var HomeDashboardView = class extends import_obsidian4.ItemView {
     }
     this.clearOrphanedTooltips();
     this.container.empty();
-    this.renderBanner();
     this.renderHeader();
     const loadingEl = this.container.createDiv("home-dashboard-loading");
     loadingEl.setText("\u6B63\u5728\u6C47\u603B\u6570\u636E...");
@@ -2325,13 +2325,10 @@ var HomeDashboardView = class extends import_obsidian4.ItemView {
     refreshButton.addEventListener("click", () => this.render());
   }
   renderBanner() {
-    if (!this.container) {
-      return;
-    }
     const now = new Date();
     const seed = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
     const bannerUrl = `https://picsum.photos/seed/${seed}/1600/400`;
-    const banner = this.container.createDiv("home-dashboard-banner");
+    const banner = this.contentEl.createDiv("home-dashboard-banner");
     const img = banner.createEl("img", {
       cls: "home-dashboard-banner-image",
       attr: { src: bannerUrl, alt: "\u6BCF\u65E5\u5C01\u9762" }

@@ -39,6 +39,7 @@ export class HomeDashboardView extends ItemView {
 	}
 
 	async onOpen(): Promise<void> {
+		this.renderBanner();
 		this.container = this.contentEl.createDiv("home-dashboard-container");
 		await this.render();
 
@@ -72,7 +73,6 @@ export class HomeDashboardView extends ItemView {
 
 		this.clearOrphanedTooltips();
 		this.container.empty();
-		this.renderBanner();
 		this.renderHeader();
 
 		const loadingEl = this.container.createDiv("home-dashboard-loading");
@@ -138,15 +138,11 @@ export class HomeDashboardView extends ItemView {
 	}
 
 	private renderBanner(): void {
-		if (!this.container) {
-			return;
-		}
-
 		const now = new Date();
 		const seed = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 		const bannerUrl = `https://picsum.photos/seed/${seed}/1600/400`;
 
-		const banner = this.container.createDiv("home-dashboard-banner");
+		const banner = this.contentEl.createDiv("home-dashboard-banner");
 		const img = banner.createEl("img", {
 			cls: "home-dashboard-banner-image",
 			attr: { src: bannerUrl, alt: "每日封面" },
