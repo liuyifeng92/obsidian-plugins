@@ -609,6 +609,86 @@
 	background-color: transparent;
 }
 
+/* ---------------------------------------------------------
+   5.1 Field distribution tabs
+   --------------------------------------------------------- */
+.kd-field-tabs {
+	background-color: transparent;
+	border: none;
+	border-radius: 0;
+	padding: 0;
+}
+
+.kd-field-tabs-bar {
+	display: flex;
+	gap: 18px;
+	margin-bottom: 18px;
+	padding-bottom: 0;
+	border-bottom: none;
+}
+
+.kd-field-tab {
+	appearance: none;
+	background: none;
+	border: none;
+	border-radius: 0;
+	box-shadow: none;
+	padding: 0;
+	font-size: 0.92rem;
+	font-weight: 500;
+	color: var(--kd-text-secondary);
+	cursor: pointer;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	opacity: 0.8;
+	transition: color 0.15s ease, opacity 0.15s ease;
+}
+
+.kd-field-tab:hover {
+	color: var(--kd-ink);
+	opacity: 1;
+}
+
+.kd-field-tab.is-active {
+	position: relative;
+	color: var(--kd-ink);
+	font-weight: 900;
+	opacity: 1;
+}
+
+.kd-field-tab.is-active::after {
+	content: "";
+	position: absolute;
+	bottom: -8px;
+	left: 50%;
+	transform: translateX(-50%);
+	width: 30%;
+	height: 4px;
+	background-color: var(--kd-ink);
+	border-radius: 9999px;
+}
+
+.kd-field-tabs-body {
+	display: grid;
+	grid-template-columns: 1fr;
+	grid-template-rows: 1fr;
+	min-height: 420px;
+}
+
+.kd-field-tab-panel {
+	grid-area: 1 / 1 / 2 / 2;
+	opacity: 0;
+	visibility: hidden;
+	transition: opacity 250ms ease, visibility 250ms ease;
+	pointer-events: none;
+}
+
+.kd-field-tab-panel.is-active {
+	opacity: 1;
+	visibility: visible;
+	pointer-events: auto;
+}
+
 .home-dashboard-field-bar-list {
 	display: flex;
 	flex-direction: column;
@@ -1124,7 +1204,7 @@
 	flex-direction: column;
 	gap: 4px;
 	background-color: var(--kd-ink);
-	border: 2px solid var(--kd-ink);
+	border: none;
 	border-radius: 0;
 	padding: 10px 12px;
 	cursor: pointer;

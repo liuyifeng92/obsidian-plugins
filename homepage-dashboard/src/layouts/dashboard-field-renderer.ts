@@ -65,10 +65,17 @@ export function renderFieldDistribution(
 
 	container.createEl("h2", { cls: "kd-field-section-title", text: "沉淀排行" });
 
-	const wrapper = container.createDiv("kd-field-panels");
+	const tabsRoot = container.createDiv("kd-field-tabs");
+	const tabsBar = tabsRoot.createDiv("kd-field-tabs-bar");
+	const weeklyTab = tabsBar.createEl("span", { cls: "kd-field-tab is-active", text: "本周动态" });
+	const totalTab = tabsBar.createEl("span", { cls: "kd-field-tab", text: "历史全局" });
 
-	const weeklyPanel = createPanel(wrapper, "本周动态");
-	weeklyPanel.addClass("kd-field-panel--weekly");
+	const tabsBody = tabsRoot.createDiv("kd-field-tabs-body");
+	const weeklyPanel = tabsBody.createDiv("kd-field-tab-panel is-active");
+	weeklyPanel.dataset.tab = "weekly";
+	const totalPanel = tabsBody.createDiv("kd-field-tab-panel");
+	totalPanel.dataset.tab = "total";
+
 	const weeklyColumns = weeklyPanel.createDiv("kd-field-panel-columns");
 
 	const weeklyProjects = projectStats.filter((s) => s.weeklyNew > 0).map((s) => ({ key: s.key, count: s.weeklyNew, items: s.weeklyItems }));
@@ -94,42 +101,59 @@ export function renderFieldDistribution(
 		renderLollipopChart(createColumn(weeklyColumns, "作者"), weeklyAuthors, app, openNote, undefined, true);
 	}
 
-	const totalPanel = createPanel(wrapper, "历史全局");
-	totalPanel.addClass("kd-field-panel--cumulative");
+	let totalRendered = false;
+	const renderTotal = (): void => {
+		if (totalRendered) return;
+		totalRendered = true;
+		totalPanel.empty();
 
-	const totalLayout = totalPanel.createDiv("kd-field-panel-cumulative");
-	const cumulativeRow = totalLayout.createDiv("kd-field-panel-columns");
+		const totalLayout = totalPanel.createDiv("kd-field-panel-cumulative");
+		const cumulativeRow = totalLayout.createDiv("kd-field-panel-columns");
 
-	renderBubbleDistribution(
-		createCumulativeColumn(cumulativeRow, "项目", "kd-cumulative-bubble"),
-		projectStats.map((s) => ({ key: s.key, count: s.total, items: s.totalItems })),
-		app,
-		openNote
-	);
-	renderTreemap(
-		createCumulativeColumn(cumulativeRow, "类型", "kd-cumulative-treemap"),
-		mergeSmallEntries(
-			typeStats.map((s) => ({ key: s.key, count: s.total, items: s.totalItems })),
-			10,
-			"其他"
-		),
-		app,
-		openNote
-	);
-	renderLollipopChart(
-		createColumn(cumulativeRow, "作者"),
-		authorStats.map((s) => ({ key: s.key, count: s.total, items: s.totalItems })),
-		app,
-		openNote,
-		undefined,
-		true
-	);
-}
+		renderBubbleDistribution(
+			createCumulativeColumn(cumulativeRow, "项目", "kd-cumulative-bubble"),
+			projectStats.map((s) => ({ key: s.key, count: s.total, items: s.totalItems })),
+			app,
+			openNote
+		);
+		renderTreemap(
+			createCumulativeColumn(cumulativeRow, "类型", "kd-cumulative-treemap"),
+			mergeSmallEntries(
+				typeStats.map((s) => ({ key: s.key, count: s.total, items: s.totalItems })),
+				10,
+				"其他"
+			),
+			app,
+			openNote
+		);
+		renderLollipopChart(
+			createColumn(cumulativeRow, "作者"),
+			authorStats.map((s) => ({ key: s.key, count: s.total, items: s.totalItems })),
+			app,
+			openNote,
+			undefined,
+			true
+		);
+	};
 
-function createPanel(wrapper: HTMLElement, title: string): HTMLElement {
-	const panel = wrapper.createDiv("kd-field-panel");
-	panel.createEl("h3", { cls: "kd-field-panel-title", text: title });
-	return panel;
+	let activeTab: "weekly" | "total" = "weekly";
+
+	const switchTab = (tab: "weekly" | "total") => {
+		if (tab === activeTab) return;
+		activeTab = tab;
+
+		if (tab === "total") {
+			renderTotal();
+		}
+
+		weeklyTab.classList.toggle("is-active", tab === "weekly");
+		totalTab.classList.toggle("is-active", tab === "total");
+		weeklyPanel.classList.toggle("is-active", tab === "weekly");
+		totalPanel.classList.toggle("is-active", tab === "total");
+	};
+
+	weeklyTab.addEventListener("click", () => switchTab("weekly"));
+	totalTab.addEventListener("click", () => switchTab("total"));
 }
 
 function createColumn(container: HTMLElement, title: string): HTMLElement {
@@ -231,7 +255,6 @@ function renderMiniCardsRow(
 
 		const card = row.createDiv("kd-mini-card");
 		card.style.backgroundColor = color;
-		card.style.borderColor = "var(--kd-ink)";
 		card.style.flexGrow = String(weight);
 		card.style.flexShrink = "0";
 		card.style.flexBasis = "0";
