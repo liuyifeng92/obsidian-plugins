@@ -193,6 +193,73 @@
 }
 
 /* ---------------------------------------------------------
+   1.5 Notion-style banner
+   --------------------------------------------------------- */
+.home-dashboard-banner {
+	position: relative;
+	width: 100%;
+	height: clamp(180px, 22vw, 220px);
+	margin-bottom: 28px;
+	overflow: hidden;
+	border-radius: 2px;
+	background: linear-gradient(
+		135deg,
+		var(--kd-stone-200) 0%,
+		var(--kd-page-bg) 100%
+	);
+}
+
+.theme-dark .home-dashboard-banner {
+	background: linear-gradient(
+		135deg,
+		var(--background-secondary-alt) 0%,
+		var(--background-primary) 100%
+	);
+}
+
+.home-dashboard-banner-image {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	opacity: 0;
+	transition: opacity 0.35s ease;
+}
+
+.home-dashboard-banner-image.is-loaded {
+	opacity: 1;
+}
+
+.home-dashboard-banner-image.is-error {
+	display: none;
+}
+
+/* Bottom fade into page background for a smooth transition */
+.home-dashboard-banner::after {
+	content: "";
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	height: 40%;
+	pointer-events: none;
+	background: linear-gradient(
+		to bottom,
+		transparent 0%,
+		var(--kd-page-bg) 100%
+	);
+}
+
+.theme-dark .home-dashboard-banner::after {
+	background: linear-gradient(
+		to bottom,
+		transparent 0%,
+		var(--background-primary) 100%
+	);
+}
+
+/* ---------------------------------------------------------
    2. Header / intro
    --------------------------------------------------------- */
 .home-dashboard-header {
