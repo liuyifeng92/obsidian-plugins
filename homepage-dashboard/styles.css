@@ -228,6 +228,19 @@
 	object-fit: cover;
 	opacity: 0;
 	transition: opacity 0.35s ease;
+	z-index: 0;
+	-webkit-mask-image: linear-gradient(
+		to bottom,
+		black 0%,
+		black 65%,
+		transparent 100%
+	);
+	mask-image: linear-gradient(
+		to bottom,
+		black 0%,
+		black 65%,
+		transparent 100%
+	);
 }
 
 .home-dashboard-banner-image.is-loaded {
@@ -238,27 +251,28 @@
 	display: none;
 }
 
-/* Bottom fade into page background for a smooth transition */
-.home-dashboard-banner::after {
+/* Bottom frosted blur band — dissolves the image into the page background */
+.home-dashboard-banner::before {
 	content: "";
 	position: absolute;
 	left: 0;
 	right: 0;
 	bottom: 0;
-	height: 40%;
+	height: 45%;
+	z-index: 1;
 	pointer-events: none;
-	background: linear-gradient(
+	backdrop-filter: blur(6px);
+	-webkit-mask-image: linear-gradient(
 		to bottom,
 		transparent 0%,
-		var(--kd-page-bg) 100%
+		black 55%,
+		black 100%
 	);
-}
-
-.theme-dark .home-dashboard-banner::after {
-	background: linear-gradient(
+	mask-image: linear-gradient(
 		to bottom,
 		transparent 0%,
-		var(--background-primary) 100%
+		black 55%,
+		black 100%
 	);
 }
 
