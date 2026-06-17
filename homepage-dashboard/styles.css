@@ -204,20 +204,11 @@
 	padding: 0 28px;
 	box-sizing: border-box;
 	overflow: hidden;
-	border-radius: 2px;
-	background: linear-gradient(
-		135deg,
-		var(--kd-stone-200) 0%,
-		var(--kd-page-bg) 100%
-	);
+	background: var(--kd-page-bg);
 }
 
 .theme-dark .home-dashboard-banner {
-	background: linear-gradient(
-		135deg,
-		var(--background-secondary-alt) 0%,
-		var(--background-primary) 100%
-	);
+	background: var(--background-primary);
 }
 
 .home-dashboard-banner-image {
@@ -232,13 +223,15 @@
 	-webkit-mask-image: linear-gradient(
 		to bottom,
 		black 0%,
-		black 65%,
+		black 35%,
+		rgba(0, 0, 0, 0.5) 55%,
 		transparent 100%
 	);
 	mask-image: linear-gradient(
 		to bottom,
 		black 0%,
-		black 65%,
+		black 35%,
+		rgba(0, 0, 0, 0.5) 55%,
 		transparent 100%
 	);
 }
@@ -265,13 +258,13 @@
 	-webkit-mask-image: linear-gradient(
 		to bottom,
 		transparent 0%,
-		black 55%,
+		black 40%,
 		black 100%
 	);
 	mask-image: linear-gradient(
 		to bottom,
 		transparent 0%,
-		black 55%,
+		black 40%,
 		black 100%
 	);
 }
@@ -289,8 +282,7 @@
 	background: linear-gradient(
 		to bottom,
 		transparent 0%,
-		rgba(215, 195, 175, 0.14) 55%,
-		transparent 100%
+		rgba(215, 195, 175, 0.05) 100%
 	);
 }
 
@@ -298,8 +290,7 @@
 	background: linear-gradient(
 		to bottom,
 		transparent 0%,
-		rgba(255, 210, 180, 0.06) 55%,
-		transparent 100%
+		rgba(255, 210, 180, 0.03) 100%
 	);
 }
 
