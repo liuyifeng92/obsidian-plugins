@@ -201,13 +201,40 @@ function renderMiniStatCards(
 
 	const grid = container.createDiv("kd-mini-cards-grid");
 	const sorted = entries.slice().sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
+	const n = sorted.length;
+	const k = Math.max(1, n - 3);
+	const topRow = sorted.slice(0, k);
+	const bottomRow = sorted.slice(k);
 
-	for (let i = 0; i < sorted.length; i++) {
-		const entry = sorted[i];
-		const color = getRankColor(i, currentBaseRed);
-		const card = grid.createDiv("kd-mini-card");
+	renderMiniCardsRow(grid, topRow, n, 0, app, openNote, "kd-mini-cards-row--top");
+	if (bottomRow.length > 0) {
+		renderMiniCardsRow(grid, bottomRow, n, k, app, openNote, "kd-mini-cards-row--bottom");
+	}
+}
+
+function renderMiniCardsRow(
+	grid: HTMLElement,
+	rowEntries: DistributionEntry[],
+	totalCount: number,
+	startIndex: number,
+	app: App,
+	openNote: (file: NoteEntry["file"]) => void,
+	rowClass: string
+): void {
+	const row = grid.createDiv(`kd-mini-cards-row ${rowClass}`);
+
+	for (let j = 0; j < rowEntries.length; j++) {
+		const entry = rowEntries[j];
+		const globalIndex = startIndex + j;
+		const color = getRankColor(globalIndex, currentBaseRed);
+		const weight = totalCount - globalIndex + 1;
+
+		const card = row.createDiv("kd-mini-card");
 		card.style.backgroundColor = color;
 		card.style.borderColor = "var(--kd-ink)";
+		card.style.flexGrow = String(weight);
+		card.style.flexShrink = "0";
+		card.style.flexBasis = "0";
 
 		const label = card.createDiv("kd-mini-card-label");
 		label.setText(entry.key);
@@ -298,70 +325,35 @@ function renderBubbleDistribution(
 	}
 
 	const sorted = entries.slice().sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
-	const maxCount = sorted[0].count;
-	const maxRadius = 65;
-	const viewW = 260;
+	const display = sorted.slice(0, 5);
+	const maxCount = display[0].count || 1;
+	const viewW = 220;
 	const viewH = 220;
 	const padding = 8;
-	const placed: PlacedCircle[] = [];
+	const maxRadius = 55;
+	const minRadius = 22;
+	const centerX = viewW / 2;
+	const centerY = viewH / 2;
 
-	for (let i = 0; i < sorted.length; i++) {
-		const entry = sorted[i];
-		const r = maxCount === 0 ? 0 : Math.sqrt(entry.count / maxCount) * maxRadius;
-		let x = viewW / 2;
-		let y = viewH / 2;
+	const radii = display.map((entry) => Math.max(minRadius, Math.sqrt(entry.count / maxCount) * maxRadius));
 
+	const circles: PlacedCircle[] = display.map((entry, i) => {
+		const r = radii[i];
 		if (i === 0) {
-			x = 90;
-			y = 105;
-		} else if (i === 1) {
-			x = 190;
-			y = 155;
-		} else if (i === 2) {
-			x = 200;
-			y = 70;
-		} else {
-			const centroid = placed.reduce(
-				(acc, c) => {
-					acc.x += c.x;
-					acc.y += c.y;
-					return acc;
-				},
-				{ x: 0, y: 0 }
-			);
-			centroid.x /= placed.length;
-			centroid.y /= placed.length;
-
-			let placedSuccessfully = false;
-			for (let revolutions = 0; revolutions < 12 && !placedSuccessfully; revolutions++) {
-				const angleStep = Math.PI / 10;
-				const radiusStep = 5;
-				for (let step = 0; step < 80; step++) {
-					const angle = step * angleStep;
-					const distance = revolutions * 35 + step * radiusStep;
-					x = centroid.x + Math.cos(angle) * distance;
-					y = centroid.y + Math.sin(angle) * distance;
-
-					if (x - r < padding || x + r > viewW - padding || y - r < padding || y + r > viewH - padding) {
-						continue;
-					}
-
-					const overlaps = placed.some((c) => {
-						const dx = c.x - x;
-						const dy = c.y - y;
-						return Math.sqrt(dx * dx + dy * dy) < c.r + r + padding;
-					});
-
-					if (!overlaps) {
-						placedSuccessfully = true;
-						break;
-					}
-				}
-			}
+			return { entry, r, x: centerX, y: centerY, color: getRankColor(i, currentBaseRed) };
 		}
+		const angle = ((i - 1) / Math.max(1, display.length - 1)) * Math.PI * 2;
+		const distance = r + radii[0] + padding * 2;
+		return {
+			entry,
+			r,
+			x: centerX + Math.cos(angle) * distance,
+			y: centerY + Math.sin(angle) * distance,
+			color: getRankColor(i, currentBaseRed),
+		};
+	});
 
-		placed.push({ x, y, r, entry, color: getRankColor(i, currentBaseRed) });
-	}
+	layoutBubbles(circles, viewW, viewH, padding);
 
 	const wrapper = container.createDiv("kd-bubble-chart");
 	wrapper.style.position = "relative";
@@ -369,7 +361,7 @@ function renderBubbleDistribution(
 
 	const svg = wrapper.createSvg("svg", { cls: "kd-bubble-svg", attr: { viewBox: `0 0 ${viewW} ${viewH}` } });
 
-	for (const circle of placed) {
+	for (const circle of circles) {
 		const g = svg.createSvg("g", { cls: "kd-bubble-group" });
 		const c = g.createSvg("circle", {
 			cls: "kd-bubble-circle",
@@ -378,23 +370,29 @@ function renderBubbleDistribution(
 		c.style.fill = circle.color;
 		c.style.fillOpacity = "1";
 
-		if (circle.r >= 24) {
-			const label = g.createSvg("text", {
-				cls: "kd-bubble-label",
-				attr: { x: circle.x, y: circle.y, "text-anchor": "middle", "dominant-baseline": "middle" },
-			});
-			label.setText(circle.entry.key);
-			if (circle.r >= 45) {
-				label.style.fontSize = "0.92rem";
-			} else if (circle.r >= 32) {
-				label.style.fontSize = "0.78rem";
-			} else {
-				label.style.fontSize = "0.68rem";
+		const label = g.createSvg("text", {
+			cls: "kd-bubble-label",
+			attr: { x: circle.x, y: circle.y, "text-anchor": "middle", "dominant-baseline": "middle" },
+		});
+		label.setText(circle.entry.key);
+
+		const PADDING_RATIO = 0.20;
+		const padding = circle.r * 2 * PADDING_RATIO;
+		const maxTextWidth = circle.r * 2 - padding * 2;
+		let fontSize = Math.min(12, Math.max(4, circle.r * 0.36));
+		label.style.fontSize = `${fontSize}px`;
+
+		for (let attempt = 0; attempt < 10; attempt++) {
+			const width = label.getComputedTextLength();
+			if (width <= maxTextWidth || fontSize <= 4) {
+				break;
 			}
+			fontSize = Math.max(4, fontSize * (maxTextWidth / width));
+			label.style.fontSize = `${fontSize}px`;
 		}
 	}
 
-	placed.forEach((circle, index) => {
+	circles.forEach((circle, index) => {
 		const hit = wrapper.createDiv("kd-bubble-hit");
 		hit.style.left = `${((circle.x - circle.r) / viewW) * 100}%`;
 		hit.style.top = `${((circle.y - circle.r) / viewH) * 100}%`;
@@ -413,6 +411,69 @@ function renderBubbleDistribution(
 			showFieldModal(`项目 · ${circle.entry.key}`, circle.entry.items, app, openNote);
 		});
 	});
+}
+
+function layoutBubbles(circles: PlacedCircle[], viewW: number, viewH: number, padding: number): void {
+	const centerX = viewW / 2;
+	const centerY = viewH / 2;
+	const iterations = 400;
+
+	for (let step = 0; step < iterations; step++) {
+		let moved = false;
+
+		for (let i = 0; i < circles.length; i++) {
+			for (let j = i + 1; j < circles.length; j++) {
+				const a = circles[i];
+				const b = circles[j];
+				const dx = b.x - a.x;
+				const dy = b.y - a.y;
+				const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+				const minDist = a.r + b.r + padding;
+
+				if (dist < minDist) {
+					const overlap = (minDist - dist) / 2;
+					const nx = dx / dist;
+					const ny = dy / dist;
+					a.x -= nx * overlap;
+					a.y -= ny * overlap;
+					b.x += nx * overlap;
+					b.y += ny * overlap;
+					moved = true;
+				}
+			}
+		}
+
+		for (const c of circles) {
+			const minX = c.r + padding;
+			const maxX = viewW - c.r - padding;
+			const minY = c.r + padding;
+			const maxY = viewH - c.r - padding;
+
+			if (c.x < minX) {
+				c.x = minX;
+				moved = true;
+			} else if (c.x > maxX) {
+				c.x = maxX;
+				moved = true;
+			}
+			if (c.y < minY) {
+				c.y = minY;
+				moved = true;
+			} else if (c.y > maxY) {
+				c.y = maxY;
+				moved = true;
+			}
+		}
+
+		for (const c of circles) {
+			c.x += (centerX - c.x) * 0.03;
+			c.y += (centerY - c.y) * 0.03;
+		}
+
+		if (!moved && step > 50) {
+			break;
+		}
+	}
 }
 
 function renderTreemap(

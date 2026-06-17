@@ -1104,12 +1104,19 @@
    12. Mini stat cards
    --------------------------------------------------------- */
 .kd-mini-cards-grid {
-	display: grid;
-	grid-template-columns: 1fr;
+	display: flex;
+	flex-direction: column;
 	gap: 10px;
 	background-color: transparent;
 	border-radius: 0;
 	padding: 0;
+}
+
+.kd-mini-cards-row {
+	display: flex;
+	width: 100%;
+	gap: 10px;
+	align-items: stretch;
 }
 
 .kd-mini-card {
@@ -1119,25 +1126,43 @@
 	background-color: var(--kd-ink);
 	border: 2px solid var(--kd-ink);
 	border-radius: 0;
-	padding: 14px 16px;
+	padding: 10px 12px;
 	cursor: pointer;
 	transition: transform 0.15s ease, background-color 0.15s ease;
+	min-width: 0;
 }
 
 .kd-mini-card:hover {
 	transform: translateY(-2px);
 }
 
+.kd-mini-cards-row--top .kd-mini-card {
+	min-height: 76px;
+}
+
+.kd-mini-cards-row--bottom .kd-mini-card {
+	min-height: 56px;
+}
+
 .kd-mini-card-value {
-	font-size: 1.8rem;
+	font-size: 1.4rem;
 	font-weight: 900;
 	color: var(--kd-paper);
 	line-height: 1;
 	letter-spacing: -0.02em;
+	text-shadow: none;
+}
+
+.kd-mini-cards-row--top .kd-mini-card-value {
+	font-size: 1.7rem;
+}
+
+.kd-mini-cards-row--bottom .kd-mini-card-value {
+	font-size: 1.2rem;
 }
 
 .kd-mini-card-label {
-	font-size: 0.6rem;
+	font-size: 0.55rem;
 	color: var(--kd-on-accent);
 	font-weight: 800;
 	text-transform: uppercase;
@@ -1145,6 +1170,8 @@
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
+	min-width: 0;
+	text-shadow: none;
 }
 
 /* ---------------------------------------------------------
@@ -1362,7 +1389,7 @@
    --------------------------------------------------------- */
 .kd-bubble-chart {
 	width: 100%;
-	aspect-ratio: 260 / 220;
+	aspect-ratio: 1 / 1;
 	position: relative;
 	background-color: var(--kd-paper);
 	border-radius: 0;
@@ -1395,6 +1422,7 @@
 	pointer-events: none;
 	text-transform: uppercase;
 	letter-spacing: 0.02em;
+	text-shadow: none;
 }
 
 .kd-bubble-hit {
