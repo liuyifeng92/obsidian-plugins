@@ -1,7 +1,7 @@
 {
 	"id": "home-dashboard",
 	"name": "【FutureLAB】Homepage Dashboard",
-	"version": "1.0.4",
+	"version": "1.0.5",
 	"minAppVersion": "0.15.0",
 	"description": "基于 YAML frontmatter 的独立主页汇总插件，支持按日期、作者、项目、类型等维度浏览笔记。",
 	"author": "刘一锋",
