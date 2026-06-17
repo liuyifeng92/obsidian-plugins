@@ -33,13 +33,116 @@ function mergeSmallEntries(entries: DistributionEntry[], threshold: number, othe
 const RANK_RED_OPACITIES = [1, 0.8, 0.8, 0.6, 0.6, 0.4, 0.4, 0.2, 0.2];
 let currentBaseRed = "242, 48, 48";
 
+function isDarkTheme(): boolean {
+	return document.body.classList.contains("theme-dark");
+}
+
+function parseRgb(rgb: string): { r: number; g: number; b: number } | null {
+	const parts = rgb.split(",").map((p) => parseFloat(p.trim()));
+	if (parts.length !== 3 || parts.some((n) => Number.isNaN(n))) return null;
+	return { r: parts[0], g: parts[1], b: parts[2] };
+}
+
+function rgbToHsl(r: number, g: number, b: number): { h: number; s: number; l: number } {
+	r /= 255;
+	g /= 255;
+	b /= 255;
+	const max = Math.max(r, g, b);
+	const min = Math.min(r, g, b);
+	const d = max - min;
+	let h = 0;
+	let s = 0;
+	const l = (max + min) / 2;
+	if (d !== 0) {
+		s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+		switch (max) {
+			case r:
+				h = (g - b) / d + (g < b ? 6 : 0);
+				break;
+			case g:
+				h = (b - r) / d + 2;
+				break;
+			case b:
+				h = (r - g) / d + 4;
+				break;
+		}
+		h /= 6;
+	}
+	return { h, s, l };
+}
+
+function hslToRgb(h: number, s: number, l: number): { r: number; g: number; b: number } {
+	let r: number;
+	let g: number;
+	let b: number;
+	if (s === 0) {
+		r = g = b = l;
+	} else {
+		const hue2rgb = (p: number, q: number, t: number): number => {
+			if (t < 0) t += 1;
+			if (t > 1) t -= 1;
+			if (t < 1 / 6) return p + (q - p) * 6 * t;
+			if (t < 1 / 2) return q;
+			if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+			return p;
+		};
+		const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+		const p = 2 * l - q;
+		r = hue2rgb(p, q, h + 1 / 3);
+		g = hue2rgb(p, q, h);
+		b = hue2rgb(p, q, h - 1 / 3);
+	}
+	return {
+		r: Math.round(r * 255),
+		g: Math.round(g * 255),
+		b: Math.round(b * 255),
+	};
+}
+
+function getDarkBaseRed(baseRed: string): { h: number; s: number; l: number } | null {
+	const rgb = parseRgb(baseRed);
+	if (!rgb) return null;
+	const hsl = rgbToHsl(rgb.r, rgb.g, rgb.b);
+	return {
+		h: hsl.h,
+		s: hsl.s * 0.7,
+		l: Math.min(hsl.l * 0.75, 0.45),
+	};
+}
+
+function getDarkRankColor(index: number, base: { h: number; s: number; l: number }): string {
+	const lightnessFactor = Math.max(0.45, 1 - index * 0.075);
+	const saturationFactor = Math.max(0.7, 1 - index * 0.03);
+	const l = Math.max(0.18, base.l * lightnessFactor);
+	const s = base.s * saturationFactor;
+	const rgb = hslToRgb(base.h, s, l);
+	return `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`;
+}
+
+function getDarkTreemapRankColor(index: number, base: { h: number; s: number; l: number }): string {
+	const lightnessFactor = Math.max(0.38, 1 - index * 0.045);
+	const saturationFactor = Math.max(0.75, 1 - index * 0.02);
+	const l = Math.max(0.15, base.l * lightnessFactor);
+	const s = base.s * saturationFactor;
+	const rgb = hslToRgb(base.h, s, l);
+	return `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`;
+}
+
 function getRankColor(index: number, baseRed: string): string {
+	if (isDarkTheme()) {
+		const base = getDarkBaseRed(baseRed);
+		if (base) return getDarkRankColor(index, base);
+	}
 	const opacity = RANK_RED_OPACITIES[index];
 	return opacity === undefined ? "var(--kd-ink)" : `rgba(${baseRed}, ${opacity})`;
 }
 
 // 累计沉淀类型（矩形树图）层级较多，使用 10% 为档位、最低 10% 的透明度梯度
 function getTreemapRankColor(index: number, baseRed: string): string {
+	if (isDarkTheme()) {
+		const base = getDarkBaseRed(baseRed);
+		if (base) return getDarkTreemapRankColor(index, base);
+	}
 	const opacity = Math.max(0.1, 1 - index * 0.1);
 	return `rgba(${baseRed}, ${opacity})`;
 }

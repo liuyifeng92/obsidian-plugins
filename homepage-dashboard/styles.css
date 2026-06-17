@@ -57,13 +57,46 @@
 .theme-dark .home-dashboard-container,
 .theme-dark .home-dashboard-modal,
 .theme-dark .home-dashboard-heatmap-tooltip {
-	--kd-paper: #171717;
-	--kd-ink: #f2f2f0;
-	--kd-ink-700: #e8e8e6;
-	--kd-ink-50: rgba(242, 242, 240, 0.5);
-	--kd-stone: #2a2a2a;
-	--kd-stone-200: #3a3a3a;
-	--kd-stone-400: #6b6b6b;
+	/* Backgrounds: blend into Obsidian surface instead of a standalone black block */
+	--kd-paper: var(--background-primary);
+	--kd-bg: transparent;
+	--kd-page-bg: transparent;
+	--kd-section-bg: transparent;
+	--kd-panel-bg: transparent;
+
+	/* Secondary surfaces: slightly lifted cards/modules */
+	--kd-surface: var(--background-primary);
+	--kd-surface-alt: var(--background-secondary);
+	--kd-module-bg: var(--background-secondary-alt);
+	--kd-hover-surface: var(--background-secondary);
+	--kd-stone: var(--background-secondary);
+	--kd-stone-200: var(--background-secondary-alt);
+	--kd-stone-400: var(--text-muted);
+
+	/* Text: softer light gray so large titles aren't glaring on dark backgrounds */
+	--kd-ink: #d0d0d0;
+	--kd-ink-700: var(--text-normal);
+	--kd-ink-50: color-mix(in srgb, var(--text-muted) 50%, transparent);
+	--kd-text-primary: var(--kd-ink);
+	--kd-text-secondary: var(--text-muted);
+
+	/* Borders / tracks: Obsidian native divider */
+	--kd-border: var(--background-modifier-border);
+	--kd-border-soft: var(--background-modifier-border);
+	--kd-border-strong: var(--background-modifier-border);
+	--kd-section-border: var(--background-modifier-border);
+	--kd-panel-border: var(--background-modifier-border);
+	/* Lighter neutral track so empty heatmap cells / lollipop rails remain visible */
+	--kd-track: rgba(255, 255, 255, 0.15);
+
+	/* Text that sits on accent/colored blocks must stay light */
+	--kd-on-accent: var(--text-normal);
+
+	/* compatibility aliases */
+	--kd-accent: var(--kd-brand-red);
+	--kd-accent-2: var(--kd-ink);
+	--kd-accent-3: var(--kd-stone-400);
+	--kd-accent-4: var(--kd-brand-red-700);
 
 	--kd-brand-red: #ff4d4d;
 	--kd-brand-red-200: #5c2a2a;
@@ -72,14 +105,71 @@
 	--kd-brand-red-700: #ff7373;
 	--kd-brand-red-900: #ff9999;
 
-	--kd-text-secondary: #a0a0a0;
-
 	/* heatmap levels (dark theme — slightly more saturated) */
 	--kd-heatmap-level-1: rgba(255, 77, 77, 0.25);
 	--kd-heatmap-level-2: rgba(255, 77, 77, 0.45);
 	--kd-heatmap-level-3: rgba(255, 77, 77, 0.65);
 	--kd-heatmap-level-4: rgba(255, 77, 77, 0.85);
 	--kd-heatmap-level-5: rgba(255, 77, 77, 1);
+}
+
+/* Dark-theme refinements: soften brutalist 2px borders and keep contrast on colored blocks */
+.theme-dark .home-dashboard-section,
+.theme-dark .home-dashboard-kpi-card,
+.theme-dark .home-dashboard-combo-card,
+.theme-dark .home-dashboard-card,
+.theme-dark .home-dashboard-table,
+.theme-dark .home-dashboard-modal,
+.theme-dark .home-dashboard-heatmap-tooltip,
+.theme-dark .home-dashboard-actions button:not(.home-dashboard-layout-button),
+.theme-dark .home-dashboard-search,
+.theme-dark .home-dashboard-layout-switcher,
+.theme-dark .home-dashboard-year-select,
+.theme-dark .home-dashboard-dropdown-trigger,
+.theme-dark .home-dashboard-dropdown-menu,
+.theme-dark .home-dashboard-scan-tag,
+.theme-dark .home-dashboard-scan-source-btn,
+.theme-dark .home-dashboard-modal-sort-button,
+.theme-dark .home-dashboard-modal-close {
+	border-width: 1px;
+}
+
+.theme-dark .kd-metric-item,
+.theme-dark .home-dashboard-kpi-card,
+.theme-dark .kd-metric-item:last-child,
+.theme-dark .home-dashboard-kpi-card:last-child {
+	border-width: 1px;
+}
+
+.theme-dark .home-dashboard-dropdown-menu {
+	box-shadow: 4px 4px 0 var(--background-modifier-border);
+}
+
+.theme-dark .kd-mini-card {
+	background-color: var(--background-secondary-alt);
+}
+
+.theme-dark .kd-mini-card-value,
+.theme-dark .kd-mini-card-label {
+	color: var(--text-normal);
+}
+
+.theme-dark .kd-treemap-label,
+.theme-dark .kd-bubble-label {
+	color: var(--text-normal);
+}
+
+.theme-dark .kd-field-tab.is-active::after {
+	background-color: var(--kd-brand-red);
+}
+
+.theme-dark .home-dashboard-heatmap-cell,
+.theme-dark .home-dashboard-heatmap-cell-placeholder {
+	border-color: transparent;
+}
+
+.theme-dark .home-dashboard-calendar-day.has-events {
+	border-color: var(--background-modifier-border);
 }
 
 /* ---------------------------------------------------------
