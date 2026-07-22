@@ -1,5 +1,5 @@
 import { MarkdownView, Platform, Plugin, TFile } from "obsidian";
-import { parseTables, upsertMarker, SourceTable } from "./src/marker";
+import { parseTables, reconcileMarkers, upsertMarker, SourceTable } from "./src/marker";
 
 const FROZEN_CLASS = "tcw-frozen";
 const SCROLL_CLASS = "tcw-scroll";
@@ -29,12 +29,13 @@ export default class TableColumnWidthPlugin extends Plugin {
 				);
 			})
 		);
-		// 用户编辑笔记（含删除标记行）后刷新缓存；Obsidian 随后重渲染，
-		// MutationObserver 冻结新表格时读到的就是最新标记
+		// 用户编辑笔记后：先做表头比对（结构变化时自动维护标记行），
+		// 再刷新缓存；Obsidian 随后重渲染，MutationObserver 冻结新表格时
+		// 读到的就是最新标记。删除标记行也在此被缓存刷新感知
 		this.registerEvent(
 			this.app.vault.on("modify", (file) => {
 				if (file instanceof TFile && file.extension === "md") {
-					void this.refreshMarkers(file);
+					void this.reconcileAndRefresh(file);
 				}
 			})
 		);
@@ -47,6 +48,23 @@ export default class TableColumnWidthPlugin extends Plugin {
 	private async refreshMarkers(file: TFile | null): Promise<void> {
 		if (!file || file.extension !== "md") return;
 		this.markers.set(file.path, parseTables(await this.app.vault.read(file)));
+	}
+
+	// 表头比对的装配层：缓存中有旧表头时，编辑触发重算宽度并写回标记行。
+	// 先读后比对、有变化才写，避免 process 无差别写文件造成 modify 循环；
+	// 写回会再触发一次 modify，但此时表头与缓存一致、比对无改动，循环自然终止
+	private async reconcileAndRefresh(file: TFile): Promise<void> {
+		const cached = this.markers.get(file.path);
+		if (!cached) return this.refreshMarkers(file);
+		const data = await this.app.vault.read(file);
+		if (reconcileMarkers(data, cached) === data) {
+			this.markers.set(file.path, parseTables(data));
+			return;
+		}
+		const next = await this.app.vault.process(file, (current) =>
+			reconcileMarkers(current, cached)
+		);
+		this.markers.set(file.path, parseTables(next));
 	}
 
 	// 用 MutationObserver 而不是 MarkdownPostProcessor：

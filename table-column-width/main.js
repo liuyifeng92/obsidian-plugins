@@ -37,9 +37,9 @@ function parseMarkerLine(line) {
   if (widths.some((w) => !Number.isInteger(w) || w <= 0)) return null;
   return widths;
 }
-function countColumns(headerLine) {
+function parseHeaders(headerLine) {
   const trimmed = headerLine.trim().replace(/^\|/, "").replace(/\|$/, "");
-  return trimmed.split("|").length;
+  return trimmed.split("|").map((cell) => cell.trim());
 }
 function parseTables(source) {
   const lines = source.split("\n");
@@ -59,9 +59,11 @@ function parseTables(source) {
     }
     if (current) continue;
     const widths = i > 0 ? parseMarkerLine(lines[i - 1]) : null;
+    const headers = parseHeaders(trimmed);
     current = {
       startLine: i,
-      colCount: countColumns(trimmed),
+      colCount: headers.length,
+      headers,
       markerLine: widths ? i - 1 : null,
       widths
     };
@@ -80,6 +82,55 @@ function upsertMarker(source, tableIndex, widths) {
     lines.splice(table.startLine, 0, marker);
   }
   return lines.join("\n");
+}
+var DEFAULT_COL_WIDTH = 120;
+function lcsPairs(oldSeq, newSeq) {
+  const m = oldSeq.length;
+  const n = newSeq.length;
+  const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+  for (let i2 = m - 1; i2 >= 0; i2--) {
+    for (let j2 = n - 1; j2 >= 0; j2--) {
+      dp[i2][j2] = oldSeq[i2] === newSeq[j2] ? dp[i2 + 1][j2 + 1] + 1 : Math.max(dp[i2 + 1][j2], dp[i2][j2 + 1]);
+    }
+  }
+  const pairs = [];
+  let i = 0;
+  let j = 0;
+  while (i < m && j < n) {
+    if (oldSeq[i] === newSeq[j]) {
+      pairs.push([i, j]);
+      i++;
+      j++;
+    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+      i++;
+    } else {
+      j++;
+    }
+  }
+  return pairs;
+}
+function reconcileWidths(oldHeaders, newHeaders, oldWidths) {
+  const kept = /* @__PURE__ */ new Map();
+  for (const [oldIndex, newIndex] of lcsPairs(oldHeaders, newHeaders)) {
+    if (oldIndex < oldWidths.length) kept.set(newIndex, oldWidths[oldIndex]);
+  }
+  return newHeaders.map((_, i) => kept.get(i) ?? DEFAULT_COL_WIDTH);
+}
+function reconcileMarkers(source, cached) {
+  const byStartLine = new Map(cached.map((t) => [t.startLine, t]));
+  const lines = source.split("\n");
+  let changed = false;
+  for (const curr of parseTables(source)) {
+    const prev = byStartLine.get(curr.startLine);
+    if (!prev?.widths || curr.markerLine === null) continue;
+    const unchanged = prev.headers.length === curr.headers.length && prev.headers.every((h, i) => h === curr.headers[i]);
+    if (unchanged) continue;
+    lines[curr.markerLine] = serializeMarkerLine(
+      reconcileWidths(prev.headers, curr.headers, prev.widths)
+    );
+    changed = true;
+  }
+  return changed ? lines.join("\n") : source;
 }
 
 // main.ts
@@ -112,7 +163,7 @@ var TableColumnWidthPlugin = class extends import_obsidian.Plugin {
     this.registerEvent(
       this.app.vault.on("modify", (file) => {
         if (file instanceof import_obsidian.TFile && file.extension === "md") {
-          void this.refreshMarkers(file);
+          void this.reconcileAndRefresh(file);
         }
       })
     );
@@ -123,6 +174,23 @@ var TableColumnWidthPlugin = class extends import_obsidian.Plugin {
   async refreshMarkers(file) {
     if (!file || file.extension !== "md") return;
     this.markers.set(file.path, parseTables(await this.app.vault.read(file)));
+  }
+  // 表头比对的装配层：缓存中有旧表头时，编辑触发重算宽度并写回标记行。
+  // 先读后比对、有变化才写，避免 process 无差别写文件造成 modify 循环；
+  // 写回会再触发一次 modify，但此时表头与缓存一致、比对无改动，循环自然终止
+  async reconcileAndRefresh(file) {
+    const cached = this.markers.get(file.path);
+    if (!cached) return this.refreshMarkers(file);
+    const data = await this.app.vault.read(file);
+    if (reconcileMarkers(data, cached) === data) {
+      this.markers.set(file.path, parseTables(data));
+      return;
+    }
+    const next = await this.app.vault.process(
+      file,
+      (current) => reconcileMarkers(current, cached)
+    );
+    this.markers.set(file.path, parseTables(next));
   }
   // 用 MutationObserver 而不是 MarkdownPostProcessor：
   // 回调是微任务，在 DOM 插入之后、浏览器绘制之前执行，

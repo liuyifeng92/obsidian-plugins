@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
 	parseMarkerLine,
 	parseTables,
+	reconcileMarkers,
+	reconcileWidths,
 	serializeMarkerLine,
 	upsertMarker,
 } from "../src/marker";
@@ -102,5 +104,81 @@ describe("upsertMarker", () => {
 		const source = "| a | b |\n|---|---|";
 		expect(upsertMarker(source, 0, [1, 2, 3])).toBeNull();
 		expect(upsertMarker(source, 1, [1, 2])).toBeNull();
+	});
+});
+
+describe("reconcileWidths", () => {
+	it("中间插入一列：新列补默认 120，其余列宽度不变", () => {
+		expect(reconcileWidths(["a", "b", "c"], ["a", "b", "x", "c"], [120, 96, 180])).toEqual([
+			120, 96, 120, 180,
+		]);
+	});
+
+	it("删除一列：移除对应位置的宽度", () => {
+		expect(reconcileWidths(["a", "b", "c"], ["a", "c"], [120, 96, 180])).toEqual([120, 180]);
+	});
+
+	it("表头改名视为删一列加一列：仅该列恢复默认，其余不错位", () => {
+		expect(reconcileWidths(["a", "b", "c"], ["a", "x", "c"], [120, 96, 180])).toEqual([
+			120, 120, 180,
+		]);
+	});
+
+	it("重复表头按序列位置对齐", () => {
+		expect(reconcileWidths(["a", "a", "b"], ["a", "a", "a", "b"], [1, 2, 3])).toEqual([
+			1, 2, 120, 3,
+		]);
+	});
+
+	it("空表头按序列位置对齐", () => {
+		expect(reconcileWidths(["", "b"], ["", "", "b"], [10, 20])).toEqual([10, 120, 20]);
+	});
+});
+
+describe("reconcileMarkers", () => {
+	it("表头插入列后原位更新标记行", () => {
+		const before = [
+			"<!-- colwidths: 120,96,180 -->",
+			"| a | b | c |",
+			"|---|---|---|",
+		].join("\n");
+		const after = [
+			"<!-- colwidths: 120,96,180 -->",
+			"| a | b | x | c |",
+			"|---|---|---|---|",
+		].join("\n");
+		expect(reconcileMarkers(after, parseTables(before))).toBe(
+			[
+				"<!-- colwidths: 120,96,120,180 -->",
+				"| a | b | x | c |",
+				"|---|---|---|---|",
+			].join("\n")
+		);
+	});
+
+	it("表头未变化时不改动源码", () => {
+		const source = [
+			"<!-- colwidths: 120,96 -->",
+			"| a | b |",
+			"|---|---|",
+		].join("\n");
+		expect(reconcileMarkers(source, parseTables(source))).toBe(source);
+	});
+
+	it("无标记行的表格不生成标记行", () => {
+		const before = "| a | b |\n|---|---|";
+		const after = "| a | b | c |\n|---|---|---|";
+		expect(reconcileMarkers(after, parseTables(before))).toBe(after);
+	});
+
+	it("表格增删导致行号偏移时不做猜测，返回原文", () => {
+		const before = [
+			"<!-- colwidths: 120,96 -->",
+			"| a | b |",
+			"|---|---|",
+		].join("\n");
+		// 上方新增内容使表格下移，startLine 对不上 → 放弃维护
+		const after = ["新插入的一行", ...before.split("\n")].join("\n").replace("| a | b |", "| a | b | c |");
+		expect(reconcileMarkers(after, parseTables(before))).toBe(after);
 	});
 });
