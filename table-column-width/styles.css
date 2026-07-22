@@ -13,4 +13,28 @@
 /* 表格总宽超出笔记区域时容器内横向滚动 */
 .tcw-scroll {
 	overflow-x: auto;
+	/* 拖动手柄的定位基准 */
+	position: relative;
+}
+
+/* 手柄覆盖层：不拦截鼠标，只有手柄本身可点 */
+.tcw-handles {
+	position: absolute;
+	pointer-events: none;
+}
+
+/* 列右边缘的拖拽热区，悬停时显示提示条 */
+.tcw-handle {
+	position: absolute;
+	top: 0;
+	width: 8px;
+	height: 100%;
+	transform: translateX(-50%);
+	cursor: col-resize;
+	pointer-events: auto;
+}
+
+.tcw-handle:hover {
+	background: var(--interactive-accent);
+	opacity: 0.5;
 }

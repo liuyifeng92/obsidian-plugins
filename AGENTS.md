@@ -99,7 +99,7 @@ obsidian插件/
 ├── auto-frontmatter/        # 文档属性管理插件
 ├── file-auto-upload-plugin/ # 文件自动上传插件
 ├── homepage-dashboard/      # 首页仪表盘插件
-├── table-column-width/      # 表格列宽拖拽插件（开发中，尚未实现）
+├── table-column-width/      # 表格列宽拖拽插件
 ├── deploy.sh                # 一键构建部署脚本
 ├── AGENTS.md
 ├── README.md

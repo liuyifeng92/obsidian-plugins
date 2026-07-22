@@ -4,7 +4,8 @@
 	"description": "Obsidian plugin that renders markdown tables with fixed layout and per-column draggable widths, persisted inside the note file.",
 	"main": "main.js",
 	"scripts": {
-		"build": "tsc -p tsconfig.json"
+		"build": "tsc -p tsconfig.json --noEmit && node esbuild.config.mjs production",
+		"test": "vitest run"
 	},
 	"keywords": [
 		"obsidian",
@@ -14,7 +15,9 @@
 	"license": "MIT",
 	"devDependencies": {
 		"@types/node": "^20.17.6",
+		"esbuild": "^0.24.0",
 		"obsidian": "^1.7.2",
-		"typescript": "^5.6.3"
+		"typescript": "^5.6.3",
+		"vitest": "^2.1.4"
 	}
 }
