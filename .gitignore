@@ -3,3 +3,4 @@ data.json
 *.code-workspace
 .DS_Store
 .codegraph/
+.scripts/ralph-loop/logs/

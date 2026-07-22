@@ -1,0 +1,16 @@
+/* 固定布局：列宽由 colgroup 决定，不随内容长短跳变 */
+.tcw-frozen {
+	table-layout: fixed;
+	max-width: none;
+}
+
+/* 单元格长文字折行显示，不撑宽列 */
+.tcw-frozen th,
+.tcw-frozen td {
+	overflow-wrap: break-word;
+}
+
+/* 表格总宽超出笔记区域时容器内横向滚动 */
+.tcw-scroll {
+	overflow-x: auto;
+}
