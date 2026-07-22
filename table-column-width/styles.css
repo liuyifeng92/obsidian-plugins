@@ -13,6 +13,7 @@
 /* 表格总宽超出笔记区域时容器内横向滚动 */
 .tcw-scroll {
 	overflow-x: auto;
+	overflow-y: hidden;
 	/* 拖动手柄的定位基准 */
 	position: relative;
 }
