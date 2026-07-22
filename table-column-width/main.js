@@ -210,6 +210,21 @@ function reconcileMarkers(source, cached) {
   return changed ? lines.join("\n") : source;
 }
 
+// src/update.ts
+function compareVersions(v1, v2) {
+  const parseVersion = (version) => version.replace(/^v/, "").split(/[+-]/, 1)[0].split(".").map((part) => {
+    const match = /^\d+/.exec(part);
+    return match ? parseInt(match[0], 10) : 0;
+  });
+  const parts1 = parseVersion(v1);
+  const parts2 = parseVersion(v2);
+  for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
+    const difference = (parts1[i] ?? 0) - (parts2[i] ?? 0);
+    if (difference !== 0) return difference;
+  }
+  return 0;
+}
+
 // main.ts
 var FROZEN_CLASS = "tcw-frozen";
 var SCROLL_CLASS = "tcw-scroll";
@@ -219,6 +234,10 @@ var COLGROUP_CLASS = "tcw-colgroup";
 var MIN_COL_WIDTH = 40;
 var MARKER_LINE_CLASS = "tcw-marker-line";
 var MARKER_SPACER_LINE_CLASS = "tcw-marker-spacer-line";
+var GITHUB_RAW_BASE = "https://raw.githubusercontent.com/liuyifeng92/obsidian-plugins/main/table-column-width";
+var DEFAULT_SETTINGS = {
+  autoUpdate: true
+};
 var markerLineDeco = import_view.Decoration.line({ class: MARKER_LINE_CLASS });
 var markerSpacerLineDeco = import_view.Decoration.line({ class: MARKER_SPACER_LINE_CLASS });
 function markerText(line) {
@@ -257,14 +276,20 @@ var hideMarkerLines = import_view.ViewPlugin.fromClass(
 var TableColumnWidthPlugin = class extends import_obsidian.Plugin {
   constructor() {
     super(...arguments);
+    this.settings = DEFAULT_SETTINGS;
     this.observer = null;
     // 笔记路径 → 源码中解析出的表格及标记行，重渲染时据此恢复宽度
     this.markers = /* @__PURE__ */ new Map();
     // 用户手动删除标记行后，本会话内保持该表格的原生 auto 布局
     this.nativeTables = /* @__PURE__ */ new Map();
     this.stopActiveDrag = null;
+    this.autoUpdateCheckTimer = null;
+    this.pendingAutoReloadTimer = null;
+    this.pendingAutoReloadVersion = "";
   }
-  onload() {
+  async onload() {
+    await this.loadSettings();
+    this.addSettingTab(new TableColumnWidthSettingTab(this.app, this));
     this.registerEditorExtension(hideMarkerLines);
     this.app.workspace.onLayoutReady(() => {
       this.restoreAllTables();
@@ -285,11 +310,20 @@ var TableColumnWidthPlugin = class extends import_obsidian.Plugin {
         }
       })
     );
+    this.scheduleAutoUpdateCheck();
   }
   onunload() {
     this.observer?.disconnect();
     this.stopActiveDrag?.();
     this.restoreAllTables();
+    this.clearAutoUpdateCheckTimer();
+    this.clearPendingAutoReloadTimer();
+  }
+  async loadSettings() {
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+  }
+  async saveSettings() {
+    await this.saveData(this.settings);
   }
   async refreshVisibleMarkers() {
     const files = /* @__PURE__ */ new Map();
@@ -569,5 +603,190 @@ var TableColumnWidthPlugin = class extends import_obsidian.Plugin {
     );
     this.markers.set(file.path, parseTables(next));
     this.nativeTables.get(file.path)?.delete(index);
+  }
+  async checkForUpdate() {
+    try {
+      const response = await fetch(`${GITHUB_RAW_BASE}/manifest.json`);
+      if (response.status === 404) {
+        return { hasUpdate: false, version: "", error: "not_found" };
+      }
+      if (!response.ok) {
+        return { hasUpdate: false, version: "", error: `\u8BF7\u6C42\u5931\u8D25\uFF1A${response.status}` };
+      }
+      const remoteManifest = await response.json();
+      const remoteVersion = remoteManifest.version ?? "";
+      if (!remoteVersion) {
+        return { hasUpdate: false, version: "", error: "\u8FDC\u7AEF\u7248\u672C\u53F7\u65E0\u6548" };
+      }
+      return {
+        hasUpdate: compareVersions(remoteVersion, this.manifest.version) > 0,
+        version: remoteVersion
+      };
+    } catch (error) {
+      return { hasUpdate: false, version: "", error: String(error) };
+    }
+  }
+  async performUpdate(version, onProgress) {
+    await this.downloadAndWriteUpdateFiles(onProgress);
+    await this.reloadPlugin(version, false);
+  }
+  async downloadAndWriteUpdateFiles(onProgress) {
+    const files = ["main.js", "manifest.json", "styles.css"];
+    const contents = {};
+    for (let index = 0; index < files.length; index++) {
+      const file = files[index];
+      const response = await fetch(`${GITHUB_RAW_BASE}/${file}`);
+      if (!response.ok) throw new Error(`\u4E0B\u8F7D ${file} \u5931\u8D25\uFF1A${response.status}`);
+      contents[file] = await response.text();
+      onProgress?.(index + 1, files.length);
+    }
+    const pluginDir = this.manifest.dir;
+    if (!pluginDir) throw new Error("\u65E0\u6CD5\u83B7\u53D6\u63D2\u4EF6\u76EE\u5F55");
+    await this.app.vault.adapter.write(`${pluginDir}/main.js`, contents["main.js"]);
+    await this.app.vault.adapter.write(`${pluginDir}/manifest.json`, contents["manifest.json"]);
+    await this.app.vault.adapter.write(`${pluginDir}/styles.css`, contents["styles.css"]);
+  }
+  async reloadPlugin(version, auto) {
+    const pluginId = this.manifest.id;
+    const app = this.app;
+    if (auto) {
+      const setting = app.setting;
+      if (setting && setting.activeTab?.id === pluginId) {
+        this.pendingAutoReloadVersion = version;
+        this.watchPendingAutoReload();
+        return;
+      }
+    }
+    new import_obsidian.Notice(auto ? `\u53D1\u73B0\u65B0\u7248\u672C\uFF08${version}\uFF09\uFF0C\u6B63\u5728\u81EA\u52A8\u66F4\u65B0...` : `\u66F4\u65B0\u5B8C\u6210\uFF08${version}\uFF09\uFF0C\u6B63\u5728\u91CD\u8F7D\u63D2\u4EF6...`);
+    window.setTimeout(async () => {
+      try {
+        await app.plugins.unloadPlugin(pluginId);
+        delete app.plugins.manifests[pluginId];
+        await new Promise((resolve) => window.setTimeout(resolve, 300));
+        await app.plugins.loadManifests();
+        await new Promise((resolve) => window.setTimeout(resolve, 300));
+        await app.plugins.loadPlugin(pluginId);
+        await app.plugins.enablePlugin(pluginId);
+        await new Promise((resolve) => window.setTimeout(resolve, 500));
+        app.setting.open();
+        app.setting.openTabById(pluginId);
+        new import_obsidian.Notice(auto ? `\u63D2\u4EF6\u5DF2\u81EA\u52A8\u66F4\u65B0\u5230 ${version}` : `\u63D2\u4EF6\u5DF2\u91CD\u8F7D\u5230 ${version}`);
+      } catch (error) {
+        console.error("[table-column-width] \u91CD\u8F7D\u5931\u8D25:", error);
+        new import_obsidian.Notice("\u81EA\u52A8\u91CD\u8F7D\u5931\u8D25\uFF0C\u8BF7\u91CD\u542F Obsidian");
+      }
+    }, 100);
+  }
+  watchPendingAutoReload() {
+    this.clearPendingAutoReloadTimer();
+    this.pendingAutoReloadTimer = window.setInterval(() => {
+      const setting = this.app.setting;
+      if (!setting || setting.activeTab?.id !== this.manifest.id) {
+        this.clearPendingAutoReloadTimer();
+        const version = this.pendingAutoReloadVersion;
+        this.pendingAutoReloadVersion = "";
+        if (version) void this.reloadPlugin(version, true);
+      }
+    }, 1e3);
+  }
+  clearAutoUpdateCheckTimer() {
+    if (this.autoUpdateCheckTimer !== null) {
+      window.clearTimeout(this.autoUpdateCheckTimer);
+      this.autoUpdateCheckTimer = null;
+    }
+  }
+  clearPendingAutoReloadTimer() {
+    if (this.pendingAutoReloadTimer !== null) {
+      window.clearInterval(this.pendingAutoReloadTimer);
+      this.pendingAutoReloadTimer = null;
+    }
+  }
+  scheduleAutoUpdateCheck() {
+    this.clearAutoUpdateCheckTimer();
+    this.autoUpdateCheckTimer = window.setTimeout(() => {
+      void this.runAutoUpdateCheck();
+      this.registerInterval(
+        window.setInterval(() => void this.runAutoUpdateCheck(), 60 * 60 * 1e3)
+      );
+    }, 30 * 1e3);
+  }
+  async runAutoUpdateCheck() {
+    if (!this.settings.autoUpdate) return;
+    const result = await this.checkForUpdate();
+    if (result.error || !result.hasUpdate) return;
+    try {
+      new import_obsidian.Notice(`\u53D1\u73B0\u65B0\u7248\u672C ${result.version}\uFF0C\u6B63\u5728\u81EA\u52A8\u66F4\u65B0...`);
+      await this.downloadAndWriteUpdateFiles();
+      await this.reloadPlugin(result.version, true);
+    } catch (error) {
+      console.error("[table-column-width] \u81EA\u52A8\u66F4\u65B0\u5931\u8D25:", error);
+    }
+  }
+};
+var TableColumnWidthSettingTab = class extends import_obsidian.PluginSettingTab {
+  constructor(app, plugin) {
+    super(app, plugin);
+    this.plugin = plugin;
+    this.isChecking = false;
+    this.isUpdating = false;
+    this.progress = 0;
+    this.latestVersion = "";
+    this.resultMessage = "";
+  }
+  display() {
+    const { containerEl } = this;
+    containerEl.empty();
+    containerEl.createEl("h2", { text: "\u7248\u672C\u66F4\u65B0" });
+    new import_obsidian.Setting(containerEl).setName("\u81EA\u52A8\u68C0\u67E5\u66F4\u65B0").setDesc("\u542F\u52A8 30 \u79D2\u540E\u68C0\u67E5\uFF0C\u4E4B\u540E\u6BCF 60 \u5206\u949F\u81EA\u52A8\u68C0\u67E5\u5E76\u66F4\u65B0\u3002").addToggle(
+      (toggle) => toggle.setValue(this.plugin.settings.autoUpdate).onChange(async (value) => {
+        this.plugin.settings.autoUpdate = value;
+        await this.plugin.saveSettings();
+      })
+    );
+    new import_obsidian.Setting(containerEl).setName("\u5F53\u524D\u7248\u672C").setDesc(this.plugin.manifest.version).addButton((button) => {
+      button.setCta().setButtonText(this.isChecking ? "\u68C0\u67E5\u4E2D..." : "\u68C0\u67E5\u66F4\u65B0").setDisabled(this.isChecking || this.isUpdating).onClick(() => void this.checkForUpdate());
+    });
+    if (!this.resultMessage) return;
+    const result = new import_obsidian.Setting(containerEl).setName(this.resultMessage);
+    if (this.latestVersion) {
+      result.addButton((button) => {
+        button.setCta().setButtonText(this.isUpdating ? `\u66F4\u65B0\u4E2D... \uFF08${this.progress}/3\uFF09` : "\u7ACB\u5373\u66F4\u65B0").setDisabled(this.isUpdating).onClick(() => void this.updateNow());
+      });
+    }
+  }
+  async checkForUpdate() {
+    this.isChecking = true;
+    this.latestVersion = "";
+    this.resultMessage = "";
+    this.display();
+    const result = await this.plugin.checkForUpdate();
+    this.isChecking = false;
+    if (result.error === "not_found") {
+      this.resultMessage = "\u672A\u627E\u5230\u8FDC\u7AEF\u4ED3\u5E93\uFF0C\u8BF7\u68C0\u67E5\u7F51\u7EDC";
+    } else if (result.error) {
+      this.resultMessage = result.error;
+    } else if (result.hasUpdate) {
+      this.latestVersion = result.version;
+      this.resultMessage = `\u53D1\u73B0\u65B0\u7248\u672C ${result.version}`;
+    } else {
+      this.resultMessage = `\u5F53\u524D\u5DF2\u662F\u6700\u65B0\u7248\u672C\uFF08${this.plugin.manifest.version}\uFF09`;
+    }
+    this.display();
+  }
+  async updateNow() {
+    this.isUpdating = true;
+    this.progress = 0;
+    this.display();
+    try {
+      await this.plugin.performUpdate(this.latestVersion, (step) => {
+        this.progress = step;
+        this.display();
+      });
+    } catch (error) {
+      this.isUpdating = false;
+      this.resultMessage = `\u66F4\u65B0\u5931\u8D25\uFF1A${String(error)}`;
+      new import_obsidian.Notice(this.resultMessage);
+      this.display();
+    }
   }
 };

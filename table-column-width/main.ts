@@ -1,4 +1,13 @@
-import { MarkdownView, Platform, Plugin, TFile } from "obsidian";
+import {
+	App,
+	MarkdownView,
+	Notice,
+	Platform,
+	Plugin,
+	PluginSettingTab,
+	Setting,
+	TFile,
+} from "obsidian";
 import {
 	Decoration,
 	DecorationSet,
@@ -16,6 +25,7 @@ import {
 	upsertMarker,
 	SourceTable,
 } from "./src/marker";
+import { compareVersions } from "./src/update";
 
 const FROZEN_CLASS = "tcw-frozen";
 const SCROLL_CLASS = "tcw-scroll";
@@ -25,6 +35,16 @@ const COLGROUP_CLASS = "tcw-colgroup";
 const MIN_COL_WIDTH = 40;
 const MARKER_LINE_CLASS = "tcw-marker-line";
 const MARKER_SPACER_LINE_CLASS = "tcw-marker-spacer-line";
+const GITHUB_RAW_BASE =
+	"https://raw.githubusercontent.com/liuyifeng92/obsidian-plugins/main/table-column-width";
+
+interface TableColumnWidthSettings {
+	autoUpdate: boolean;
+}
+
+const DEFAULT_SETTINGS: TableColumnWidthSettings = {
+	autoUpdate: true,
+};
 
 // Live Preview 下标记行是可见文本（行内 span 带 cm-comment 类），CSS 无法按
 // 文本内容选择，改用 ViewPlugin 给匹配标记行的整行加类，再由 CSS 隐藏
@@ -73,14 +93,20 @@ const hideMarkerLines = ViewPlugin.fromClass(
 );
 
 export default class TableColumnWidthPlugin extends Plugin {
+	settings: TableColumnWidthSettings = DEFAULT_SETTINGS;
 	private observer: MutationObserver | null = null;
 	// 笔记路径 → 源码中解析出的表格及标记行，重渲染时据此恢复宽度
 	private markers = new Map<string, SourceTable[]>();
 	// 用户手动删除标记行后，本会话内保持该表格的原生 auto 布局
 	private nativeTables = new Map<string, Set<number>>();
 	private stopActiveDrag: (() => void) | null = null;
+	private autoUpdateCheckTimer: number | null = null;
+	private pendingAutoReloadTimer: number | null = null;
+	private pendingAutoReloadVersion = "";
 
-	onload(): void {
+	async onload(): Promise<void> {
+		await this.loadSettings();
+		this.addSettingTab(new TableColumnWidthSettingTab(this.app, this));
 		// Live Preview 中隐藏标记行（光标行除外，仍可编辑删除）
 		this.registerEditorExtension(hideMarkerLines);
 		this.app.workspace.onLayoutReady(() => {
@@ -108,12 +134,23 @@ export default class TableColumnWidthPlugin extends Plugin {
 				}
 			})
 		);
+		this.scheduleAutoUpdateCheck();
 	}
 
 	onunload(): void {
 		this.observer?.disconnect();
 		this.stopActiveDrag?.();
 		this.restoreAllTables();
+		this.clearAutoUpdateCheckTimer();
+		this.clearPendingAutoReloadTimer();
+	}
+
+	private async loadSettings(): Promise<void> {
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+	}
+
+	async saveSettings(): Promise<void> {
+		await this.saveData(this.settings);
 	}
 
 	private async refreshVisibleMarkers(): Promise<void> {
@@ -448,5 +485,237 @@ export default class TableColumnWidthPlugin extends Plugin {
 		// 立即同步内存缓存，避免重渲染早于 modify 事件的刷新而读到旧标记
 		this.markers.set(file.path, parseTables(next));
 		this.nativeTables.get(file.path)?.delete(index);
+	}
+
+	async checkForUpdate(): Promise<{ hasUpdate: boolean; version: string; error?: string }> {
+		try {
+			const response = await fetch(`${GITHUB_RAW_BASE}/manifest.json`);
+			if (response.status === 404) {
+				return { hasUpdate: false, version: "", error: "not_found" };
+			}
+			if (!response.ok) {
+				return { hasUpdate: false, version: "", error: `请求失败：${response.status}` };
+			}
+
+			const remoteManifest = (await response.json()) as { version?: string };
+			const remoteVersion = remoteManifest.version ?? "";
+			if (!remoteVersion) {
+				return { hasUpdate: false, version: "", error: "远端版本号无效" };
+			}
+			return {
+				hasUpdate: compareVersions(remoteVersion, this.manifest.version) > 0,
+				version: remoteVersion,
+			};
+		} catch (error) {
+			return { hasUpdate: false, version: "", error: String(error) };
+		}
+	}
+
+	async performUpdate(
+		version: string,
+		onProgress?: (step: number, total: number) => void
+	): Promise<void> {
+		await this.downloadAndWriteUpdateFiles(onProgress);
+		await this.reloadPlugin(version, false);
+	}
+
+	private async downloadAndWriteUpdateFiles(
+		onProgress?: (step: number, total: number) => void
+	): Promise<void> {
+		const files = ["main.js", "manifest.json", "styles.css"] as const;
+		const contents: Record<string, string> = {};
+		for (let index = 0; index < files.length; index++) {
+			const file = files[index];
+			const response = await fetch(`${GITHUB_RAW_BASE}/${file}`);
+			if (!response.ok) throw new Error(`下载 ${file} 失败：${response.status}`);
+			contents[file] = await response.text();
+			onProgress?.(index + 1, files.length);
+		}
+
+		const pluginDir = this.manifest.dir;
+		if (!pluginDir) throw new Error("无法获取插件目录");
+		await this.app.vault.adapter.write(`${pluginDir}/main.js`, contents["main.js"]);
+		await this.app.vault.adapter.write(`${pluginDir}/manifest.json`, contents["manifest.json"]);
+		await this.app.vault.adapter.write(`${pluginDir}/styles.css`, contents["styles.css"]);
+	}
+
+	private async reloadPlugin(version: string, auto: boolean): Promise<void> {
+		const pluginId = this.manifest.id;
+		const app = this.app;
+		if (auto) {
+			// @ts-ignore — Obsidian 内部 API
+			const setting = app.setting;
+			if (setting && setting.activeTab?.id === pluginId) {
+				this.pendingAutoReloadVersion = version;
+				this.watchPendingAutoReload();
+				return;
+			}
+		}
+
+		new Notice(auto ? `发现新版本（${version}），正在自动更新...` : `更新完成（${version}），正在重载插件...`);
+		window.setTimeout(async () => {
+			try {
+				// @ts-ignore — Obsidian 内部 API
+				await app.plugins.unloadPlugin(pluginId);
+				// @ts-ignore — Obsidian 内部 API
+				delete app.plugins.manifests[pluginId];
+				await new Promise((resolve) => window.setTimeout(resolve, 300));
+				// @ts-ignore — Obsidian 内部 API
+				await app.plugins.loadManifests();
+				await new Promise((resolve) => window.setTimeout(resolve, 300));
+				// @ts-ignore — Obsidian 内部 API
+				await app.plugins.loadPlugin(pluginId);
+				// @ts-ignore — Obsidian 内部 API
+				await app.plugins.enablePlugin(pluginId);
+				await new Promise((resolve) => window.setTimeout(resolve, 500));
+				// @ts-ignore — Obsidian 内部 API
+				app.setting.open();
+				// @ts-ignore — Obsidian 内部 API
+				app.setting.openTabById(pluginId);
+				new Notice(auto ? `插件已自动更新到 ${version}` : `插件已重载到 ${version}`);
+			} catch (error) {
+				console.error("[table-column-width] 重载失败:", error);
+				new Notice("自动重载失败，请重启 Obsidian");
+			}
+		}, 100);
+	}
+
+	private watchPendingAutoReload(): void {
+		this.clearPendingAutoReloadTimer();
+		this.pendingAutoReloadTimer = window.setInterval(() => {
+			// @ts-ignore — Obsidian 内部 API
+			const setting = this.app.setting;
+			if (!setting || setting.activeTab?.id !== this.manifest.id) {
+				this.clearPendingAutoReloadTimer();
+				const version = this.pendingAutoReloadVersion;
+				this.pendingAutoReloadVersion = "";
+				if (version) void this.reloadPlugin(version, true);
+			}
+		}, 1000);
+	}
+
+	private clearAutoUpdateCheckTimer(): void {
+		if (this.autoUpdateCheckTimer !== null) {
+			window.clearTimeout(this.autoUpdateCheckTimer);
+			this.autoUpdateCheckTimer = null;
+		}
+	}
+
+	private clearPendingAutoReloadTimer(): void {
+		if (this.pendingAutoReloadTimer !== null) {
+			window.clearInterval(this.pendingAutoReloadTimer);
+			this.pendingAutoReloadTimer = null;
+		}
+	}
+
+	private scheduleAutoUpdateCheck(): void {
+		this.clearAutoUpdateCheckTimer();
+		this.autoUpdateCheckTimer = window.setTimeout(() => {
+			void this.runAutoUpdateCheck();
+			this.registerInterval(
+				window.setInterval(() => void this.runAutoUpdateCheck(), 60 * 60 * 1000)
+			);
+		}, 30 * 1000);
+	}
+
+	private async runAutoUpdateCheck(): Promise<void> {
+		if (!this.settings.autoUpdate) return;
+		const result = await this.checkForUpdate();
+		if (result.error || !result.hasUpdate) return;
+		try {
+			new Notice(`发现新版本 ${result.version}，正在自动更新...`);
+			await this.downloadAndWriteUpdateFiles();
+			await this.reloadPlugin(result.version, true);
+		} catch (error) {
+			console.error("[table-column-width] 自动更新失败:", error);
+		}
+	}
+}
+
+class TableColumnWidthSettingTab extends PluginSettingTab {
+	private isChecking = false;
+	private isUpdating = false;
+	private progress = 0;
+	private latestVersion = "";
+	private resultMessage = "";
+
+	constructor(app: App, private plugin: TableColumnWidthPlugin) {
+		super(app, plugin);
+	}
+
+	display(): void {
+		const { containerEl } = this;
+		containerEl.empty();
+		containerEl.createEl("h2", { text: "版本更新" });
+
+		new Setting(containerEl)
+			.setName("自动检查更新")
+			.setDesc("启动 30 秒后检查，之后每 60 分钟自动检查并更新。")
+			.addToggle((toggle) =>
+				toggle.setValue(this.plugin.settings.autoUpdate).onChange(async (value) => {
+					this.plugin.settings.autoUpdate = value;
+					await this.plugin.saveSettings();
+				})
+			);
+
+		new Setting(containerEl)
+			.setName("当前版本")
+			.setDesc(this.plugin.manifest.version)
+			.addButton((button) => {
+				button
+					.setCta()
+					.setButtonText(this.isChecking ? "检查中..." : "检查更新")
+					.setDisabled(this.isChecking || this.isUpdating)
+					.onClick(() => void this.checkForUpdate());
+			});
+
+		if (!this.resultMessage) return;
+		const result = new Setting(containerEl).setName(this.resultMessage);
+		if (this.latestVersion) {
+			result.addButton((button) => {
+				button
+					.setCta()
+					.setButtonText(this.isUpdating ? `更新中... （${this.progress}/3）` : "立即更新")
+					.setDisabled(this.isUpdating)
+					.onClick(() => void this.updateNow());
+			});
+		}
+	}
+
+	private async checkForUpdate(): Promise<void> {
+		this.isChecking = true;
+		this.latestVersion = "";
+		this.resultMessage = "";
+		this.display();
+		const result = await this.plugin.checkForUpdate();
+		this.isChecking = false;
+		if (result.error === "not_found") {
+			this.resultMessage = "未找到远端仓库，请检查网络";
+		} else if (result.error) {
+			this.resultMessage = result.error;
+		} else if (result.hasUpdate) {
+			this.latestVersion = result.version;
+			this.resultMessage = `发现新版本 ${result.version}`;
+		} else {
+			this.resultMessage = `当前已是最新版本（${this.plugin.manifest.version}）`;
+		}
+		this.display();
+	}
+
+	private async updateNow(): Promise<void> {
+		this.isUpdating = true;
+		this.progress = 0;
+		this.display();
+		try {
+			await this.plugin.performUpdate(this.latestVersion, (step) => {
+				this.progress = step;
+				this.display();
+			});
+		} catch (error) {
+			this.isUpdating = false;
+			this.resultMessage = `更新失败：${String(error)}`;
+			new Notice(this.resultMessage);
+			this.display();
+		}
 	}
 }
