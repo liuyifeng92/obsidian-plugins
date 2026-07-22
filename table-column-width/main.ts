@@ -24,10 +24,16 @@ const HANDLE_CLASS = "tcw-handle";
 const COLGROUP_CLASS = "tcw-colgroup";
 const MIN_COL_WIDTH = 40;
 const MARKER_LINE_CLASS = "tcw-marker-line";
+const MARKER_SPACER_LINE_CLASS = "tcw-marker-spacer-line";
 
 // Live Preview 下标记行是可见文本（行内 span 带 cm-comment 类），CSS 无法按
 // 文本内容选择，改用 ViewPlugin 给匹配标记行的整行加类，再由 CSS 隐藏
 const markerLineDeco = Decoration.line({ class: MARKER_LINE_CLASS });
+const markerSpacerLineDeco = Decoration.line({ class: MARKER_SPACER_LINE_CLASS });
+
+function markerText(line: string): string {
+	return line.replace(/^\s*(?:>\s*)*/, "");
+}
 
 function buildMarkerLineDecos(view: EditorView): DecorationSet {
 	const builder = new RangeSetBuilder<Decoration>();
@@ -35,9 +41,15 @@ function buildMarkerLineDecos(view: EditorView): DecorationSet {
 		let pos = from;
 		while (pos <= to) {
 			const line = view.state.doc.lineAt(pos);
-			const markerText = line.text.replace(/^\s*(?:>\s*)*/, "");
-			if (parseMarkerLine(markerText) !== null) {
+			const text = markerText(line.text);
+			if (parseMarkerLine(text) !== null) {
 				builder.add(line.from, line.from, markerLineDeco);
+			} else if (
+				text.trim() === "" &&
+				line.number > 1 &&
+				parseMarkerLine(markerText(view.state.doc.line(line.number - 1).text)) !== null
+			) {
+				builder.add(line.from, line.from, markerSpacerLineDeco);
 			}
 			pos = line.to + 1;
 		}

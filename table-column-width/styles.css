@@ -44,3 +44,8 @@
 .is-live-preview .cm-line.tcw-marker-line:not(.cm-active) {
 	display: none;
 }
+
+/* 标记后的空行只用于维持 Markdown 块边界，Live Preview 中不占高度 */
+.is-live-preview .cm-line.tcw-marker-spacer-line {
+	display: none;
+}

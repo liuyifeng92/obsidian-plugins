@@ -218,16 +218,23 @@ var HANDLE_CLASS = "tcw-handle";
 var COLGROUP_CLASS = "tcw-colgroup";
 var MIN_COL_WIDTH = 40;
 var MARKER_LINE_CLASS = "tcw-marker-line";
+var MARKER_SPACER_LINE_CLASS = "tcw-marker-spacer-line";
 var markerLineDeco = import_view.Decoration.line({ class: MARKER_LINE_CLASS });
+var markerSpacerLineDeco = import_view.Decoration.line({ class: MARKER_SPACER_LINE_CLASS });
+function markerText(line) {
+  return line.replace(/^\s*(?:>\s*)*/, "");
+}
 function buildMarkerLineDecos(view) {
   const builder = new import_state.RangeSetBuilder();
   for (const { from, to } of view.visibleRanges) {
     let pos = from;
     while (pos <= to) {
       const line = view.state.doc.lineAt(pos);
-      const markerText = line.text.replace(/^\s*(?:>\s*)*/, "");
-      if (parseMarkerLine(markerText) !== null) {
+      const text = markerText(line.text);
+      if (parseMarkerLine(text) !== null) {
         builder.add(line.from, line.from, markerLineDeco);
+      } else if (text.trim() === "" && line.number > 1 && parseMarkerLine(markerText(view.state.doc.line(line.number - 1).text)) !== null) {
+        builder.add(line.from, line.from, markerSpacerLineDeco);
       }
       pos = line.to + 1;
     }
