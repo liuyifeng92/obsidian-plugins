@@ -413,7 +413,6 @@ var TableColumnWidthPlugin = class extends import_obsidian.Plugin {
   freezeTable(table) {
     if (table.classList.contains(FROZEN_CLASS)) return;
     if (!this.isNativeMarkdownTable(table)) return;
-    if (table.closest(`.${SCROLL_CLASS}`)) return;
     const firstRow = table.rows[0];
     if (!firstRow) return;
     const colCount = firstRow.cells.length;
@@ -447,6 +446,7 @@ var TableColumnWidthPlugin = class extends import_obsidian.Plugin {
     table.classList.add(FROZEN_CLASS);
     const livePreviewHost = table.closest(".cm-table-widget");
     if (livePreviewHost instanceof HTMLElement) {
+      livePreviewHost.querySelectorAll(`.${HANDLES_CLASS}`).forEach((element) => element.remove());
       livePreviewHost.classList.add(SCROLL_CLASS);
       this.layoutScrollArea(view, livePreviewHost, table);
       livePreviewHost.scrollLeft = 0;
