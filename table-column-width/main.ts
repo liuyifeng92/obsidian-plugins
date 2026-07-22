@@ -292,7 +292,17 @@ export default class TableColumnWidthPlugin extends Plugin {
 		table.style.width = `${total}px`;
 		table.classList.add(FROZEN_CLASS);
 
-		// 包一层滚动容器：总宽超出笔记区域时横向滚动
+		// Live Preview 自带可滚动的表格宿主，直接扩展它才不会被
+		// CodeMirror 的 contain: paint 在正文右边界截断
+		const livePreviewHost = table.closest(".cm-table-widget");
+		if (livePreviewHost instanceof HTMLElement) {
+			livePreviewHost.classList.add(SCROLL_CLASS);
+			this.layoutScrollArea(view, livePreviewHost, table);
+			livePreviewHost.scrollLeft = 0;
+			return;
+		}
+
+		// 阅读视图包一层滚动容器：总宽超出笔记区域时横向滚动
 		const wrapper = document.createElement("div");
 		wrapper.className = SCROLL_CLASS;
 		table.parentElement?.insertBefore(wrapper, table);
@@ -309,18 +319,35 @@ export default class TableColumnWidthPlugin extends Plugin {
 		const content = wrapper.parentElement;
 		const pane = table.closest(".markdown-source-view, .markdown-preview-view");
 		if (!content || !pane || !view.containerEl.contains(pane)) return;
+		const isLivePreview = wrapper.classList.contains("cm-table-widget");
+		const scrollLeft = wrapper.scrollLeft;
+		if (isLivePreview) {
+			// 先还原 Obsidian 原生宿主几何，以表格实际起点作为正文左缘。
+			// .cm-content 本身铺满分栏，不能代表居中的 .cm-line 起点。
+			wrapper.scrollLeft = 0;
+			wrapper.style.removeProperty("margin-left");
+			wrapper.style.removeProperty("padding-left");
+			wrapper.style.removeProperty("width");
+		}
 		const paneRect = pane.getBoundingClientRect();
-		const contentRect = content.getBoundingClientRect();
-		const layout = calculateBleedLayout(paneRect.left, paneRect.right, contentRect.left);
-		wrapper.style.marginLeft = `${layout.marginLeft}px`;
+		const contentLeft = isLivePreview
+			? table.getBoundingClientRect().left
+			: content.getBoundingClientRect().left;
+		const layout = calculateBleedLayout(paneRect.left, paneRect.right, contentLeft);
+		wrapper.style.setProperty(
+			"margin-left",
+			`${layout.marginLeft}px`,
+			isLivePreview ? "important" : ""
+		);
 		wrapper.style.paddingLeft = `${layout.paddingLeft}px`;
 		wrapper.style.width = `${layout.width}px`;
+		if (isLivePreview) wrapper.scrollLeft = scrollLeft;
 	}
 
 	private layoutAllScrollAreas(): void {
 		document.querySelectorAll(`.${SCROLL_CLASS}`).forEach((element) => {
 			if (!(element instanceof HTMLElement)) return;
-			const table = element.querySelector(":scope > table");
+			const table = element.querySelector(`table.${FROZEN_CLASS}`);
 			if (!(table instanceof HTMLTableElement)) return;
 			const view = this.viewForTable(table);
 			if (view) this.layoutScrollArea(view, element, table);
@@ -328,11 +355,16 @@ export default class TableColumnWidthPlugin extends Plugin {
 	}
 
 	private restoreTable(table: HTMLTableElement): void {
-		const wrapper = table.parentElement;
-		if (wrapper?.classList.contains(SCROLL_CLASS)) {
-			wrapper.querySelector(`.${HANDLES_CLASS}`)?.remove();
-			wrapper.parentElement?.insertBefore(table, wrapper);
-			wrapper.remove();
+		const scrollArea = table.closest(`.${SCROLL_CLASS}`);
+		scrollArea?.querySelector(`.${HANDLES_CLASS}`)?.remove();
+		if (scrollArea instanceof HTMLElement && scrollArea === table.parentElement) {
+			scrollArea.parentElement?.insertBefore(table, scrollArea);
+			scrollArea.remove();
+		} else if (scrollArea instanceof HTMLElement) {
+			scrollArea.classList.remove(SCROLL_CLASS);
+			scrollArea.style.removeProperty("margin-left");
+			scrollArea.style.removeProperty("padding-left");
+			scrollArea.style.removeProperty("width");
 		}
 		table.querySelector(":scope > colgroup")?.remove();
 		table.classList.remove(FROZEN_CLASS);

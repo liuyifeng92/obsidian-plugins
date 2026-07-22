@@ -445,6 +445,13 @@ var TableColumnWidthPlugin = class extends import_obsidian.Plugin {
     table.dataset.tcwOriginalWidth = table.style.width;
     table.style.width = `${total}px`;
     table.classList.add(FROZEN_CLASS);
+    const livePreviewHost = table.closest(".cm-table-widget");
+    if (livePreviewHost instanceof HTMLElement) {
+      livePreviewHost.classList.add(SCROLL_CLASS);
+      this.layoutScrollArea(view, livePreviewHost, table);
+      livePreviewHost.scrollLeft = 0;
+      return;
+    }
     const wrapper = document.createElement("div");
     wrapper.className = SCROLL_CLASS;
     table.parentElement?.insertBefore(wrapper, table);
@@ -456,28 +463,46 @@ var TableColumnWidthPlugin = class extends import_obsidian.Plugin {
     const content = wrapper.parentElement;
     const pane = table.closest(".markdown-source-view, .markdown-preview-view");
     if (!content || !pane || !view.containerEl.contains(pane)) return;
+    const isLivePreview = wrapper.classList.contains("cm-table-widget");
+    const scrollLeft = wrapper.scrollLeft;
+    if (isLivePreview) {
+      wrapper.scrollLeft = 0;
+      wrapper.style.removeProperty("margin-left");
+      wrapper.style.removeProperty("padding-left");
+      wrapper.style.removeProperty("width");
+    }
     const paneRect = pane.getBoundingClientRect();
-    const contentRect = content.getBoundingClientRect();
-    const layout = calculateBleedLayout(paneRect.left, paneRect.right, contentRect.left);
-    wrapper.style.marginLeft = `${layout.marginLeft}px`;
+    const contentLeft = isLivePreview ? table.getBoundingClientRect().left : content.getBoundingClientRect().left;
+    const layout = calculateBleedLayout(paneRect.left, paneRect.right, contentLeft);
+    wrapper.style.setProperty(
+      "margin-left",
+      `${layout.marginLeft}px`,
+      isLivePreview ? "important" : ""
+    );
     wrapper.style.paddingLeft = `${layout.paddingLeft}px`;
     wrapper.style.width = `${layout.width}px`;
+    if (isLivePreview) wrapper.scrollLeft = scrollLeft;
   }
   layoutAllScrollAreas() {
     document.querySelectorAll(`.${SCROLL_CLASS}`).forEach((element) => {
       if (!(element instanceof HTMLElement)) return;
-      const table = element.querySelector(":scope > table");
+      const table = element.querySelector(`table.${FROZEN_CLASS}`);
       if (!(table instanceof HTMLTableElement)) return;
       const view = this.viewForTable(table);
       if (view) this.layoutScrollArea(view, element, table);
     });
   }
   restoreTable(table) {
-    const wrapper = table.parentElement;
-    if (wrapper?.classList.contains(SCROLL_CLASS)) {
-      wrapper.querySelector(`.${HANDLES_CLASS}`)?.remove();
-      wrapper.parentElement?.insertBefore(table, wrapper);
-      wrapper.remove();
+    const scrollArea = table.closest(`.${SCROLL_CLASS}`);
+    scrollArea?.querySelector(`.${HANDLES_CLASS}`)?.remove();
+    if (scrollArea instanceof HTMLElement && scrollArea === table.parentElement) {
+      scrollArea.parentElement?.insertBefore(table, scrollArea);
+      scrollArea.remove();
+    } else if (scrollArea instanceof HTMLElement) {
+      scrollArea.classList.remove(SCROLL_CLASS);
+      scrollArea.style.removeProperty("margin-left");
+      scrollArea.style.removeProperty("padding-left");
+      scrollArea.style.removeProperty("width");
     }
     table.querySelector(":scope > colgroup")?.remove();
     table.classList.remove(FROZEN_CLASS);
