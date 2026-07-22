@@ -9,6 +9,7 @@ import {
 import { RangeSetBuilder } from "@codemirror/state";
 import {
 	minimalTextChange,
+	normalizeMarkerSpacing,
 	parseMarkerLine,
 	parseTables,
 	reconcileMarkers,
@@ -114,7 +115,13 @@ export default class TableColumnWidthPlugin extends Plugin {
 
 	private async refreshMarkers(file: TFile | null): Promise<void> {
 		if (!file || file.extension !== "md") return;
-		this.markers.set(file.path, parseTables(await this.app.vault.read(file)));
+		const data = await this.app.vault.read(file);
+		const normalized = normalizeMarkerSpacing(data);
+		const next =
+			normalized === data
+				? data
+				: await this.app.vault.process(file, (current) => normalizeMarkerSpacing(current));
+		this.markers.set(file.path, parseTables(next));
 	}
 
 	// 表头比对的装配层：缓存中有旧表头时，编辑触发重算宽度并写回标记行。

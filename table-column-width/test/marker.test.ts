@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
 	minimalTextChange,
+	normalizeMarkerSpacing,
 	parseMarkerLine,
 	parseTables,
 	reconcileMarkers,
@@ -12,7 +13,7 @@ import {
 describe("minimalTextChange", () => {
 	it("插入标记行时只产生一段插入，不替换表格源码", () => {
 		const before = "前文\n| a | b |\n| --- | --- |";
-		const after = "前文\n<!-- colwidths: 100,200 -->\n| a | b |\n| --- | --- |";
+		const after = "前文\n<!-- colwidths: 100,200 -->\n\n| a | b |\n| --- | --- |";
 		const change = minimalTextChange(before, after);
 		expect(change.from).toBe(change.to);
 		expect(before.slice(0, change.from) + change.text + before.slice(change.to)).toBe(after);
@@ -121,14 +122,38 @@ describe("parseTables", () => {
 		expect(table.markerLine).toBe(1);
 		expect(table.widths).toEqual([100, 200]);
 	});
+
+	it("识别与表格相隔一个空行的标记行", () => {
+		const markdown = [
+			"<!-- colwidths: 100,200 -->",
+			"",
+			"| a | b |",
+			"| --- | --- |",
+		].join("\n");
+		const [table] = parseTables(markdown);
+		expect(table.markerLine).toBe(0);
+		expect(table.widths).toEqual([100, 200]);
+	});
+});
+
+describe("normalizeMarkerSpacing", () => {
+	it("在旧标记行与表格之间补空行，避免 Live Preview 退化为源码", () => {
+		const source = "<!-- colwidths: 100,200 -->\n| a | b |\n| --- | --- |";
+		expect(normalizeMarkerSpacing(source)).toBe(
+			"<!-- colwidths: 100,200 -->\n\n| a | b |\n| --- | --- |"
+		);
+		expect(normalizeMarkerSpacing("> <!-- colwidths: 100,200 -->\n> | a | b |\n> | --- | --- |")).toBe(
+			"> <!-- colwidths: 100,200 -->\n>\n> | a | b |\n> | --- | --- |"
+		);
+	});
 });
 
 describe("upsertMarker", () => {
-	it("无标记行表格首次拖动：在表格正上方插入标记行", () => {
+	it("无标记行表格首次拖动：在表格上方插入标记行并留空行", () => {
 		const source = ["前文", "| a | b |", "|---|---|"].join("\n");
 		const result = upsertMarker(source, 0, [120, 96]);
 		expect(result).toBe(
-			["前文", "<!-- colwidths: 120,96 -->", "| a | b |", "|---|---|"].join("\n")
+			["前文", "<!-- colwidths: 120,96 -->", "", "| a | b |", "|---|---|"].join("\n")
 		);
 	});
 
@@ -140,14 +165,14 @@ describe("upsertMarker", () => {
 		].join("\n");
 		const result = upsertMarker(source, 0, [150, 80]);
 		expect(result).toBe(
-			["<!-- colwidths: 150,80 -->", "| a | b |", "|---|---|"].join("\n")
+			["<!-- colwidths: 150,80 -->", "", "| a | b |", "|---|---|"].join("\n")
 		);
 	});
 
 	it("callout 表格的标记行保留引用前缀", () => {
 		const source = "> [!note]\n> | a | b |\n> | --- | --- |";
 		expect(upsertMarker(source, 0, [100, 200])).toBe(
-			"> [!note]\n> <!-- colwidths: 100,200 -->\n> | a | b |\n> | --- | --- |"
+			"> [!note]\n> <!-- colwidths: 100,200 -->\n>\n> | a | b |\n> | --- | --- |"
 		);
 	});
 

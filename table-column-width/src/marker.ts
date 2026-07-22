@@ -8,7 +8,7 @@ export interface SourceTable {
 	colCount: number;
 	/** 表头各列文本（trim 后），表头比对 diff 的输入 */
 	headers: string[];
-	/** 表格正上方标记行的行号；无标记行时为 null */
+	/** 表格上方标记行的行号；无标记行时为 null */
 	markerLine: number | null;
 	/** 标记行解析出的各列像素宽度；无标记行或非法时为 null */
 	widths: number[] | null;
@@ -89,6 +89,14 @@ function splitContainerPrefix(line: string): { prefix: string; content: string }
 	return { prefix, content: line.slice(prefix.length) };
 }
 
+function sameContainer(a: string, b: string): boolean {
+	return a.replace(/\s/g, "") === b.replace(/\s/g, "");
+}
+
+function blankContainerLine(prefix: string): string {
+	return prefix.includes(">") ? prefix.trimEnd() : "";
+}
+
 // 解析表头行：首尾竖线可选，转义竖线保留在单元格内
 export function parseHeaders(headerLine: string): string[] {
 	return splitTableRow(headerLine) ?? [];
@@ -128,13 +136,18 @@ export function parseTables(source: string): SourceTable[] {
 			continue;
 		}
 
-		const previous = i > 0 ? splitContainerPrefix(lines[i - 1]) : null;
-		const widths = previous?.prefix === prefix ? parseMarkerLine(previous.content) : null;
+		let markerLine = i - 1;
+		const previous = markerLine >= 0 ? splitContainerPrefix(lines[markerLine]) : null;
+		if (previous && previous.content.trim() === "" && sameContainer(previous.prefix, prefix)) {
+			markerLine--;
+		}
+		const marker = markerLine >= 0 ? splitContainerPrefix(lines[markerLine]) : null;
+		const widths = marker && sameContainer(marker.prefix, prefix) ? parseMarkerLine(marker.content) : null;
 		tables.push({
 			startLine: i,
 			colCount: headers.length,
 			headers,
-			markerLine: widths ? i - 1 : null,
+			markerLine: widths ? markerLine : null,
 			widths,
 		});
 		i++; // 分隔行不可能另起一张表
@@ -142,7 +155,21 @@ export function parseTables(source: string): SourceTable[] {
 	return tables;
 }
 
-// 把 widths 写入第 tableIndex 张表格的标记行：有则原位替换，无则插入到表格正上方。
+// Obsidian Live Preview 需要 HTML 标记与表头之间有空行；旧格式在加载时迁移。
+export function normalizeMarkerSpacing(source: string): string {
+	const lines = source.split("\n");
+	const immediate = parseTables(source).filter(
+		(table) => table.markerLine !== null && table.startLine === table.markerLine + 1
+	);
+	for (let i = immediate.length - 1; i >= 0; i--) {
+		const table = immediate[i];
+		const { prefix } = splitContainerPrefix(lines[table.startLine]);
+		lines.splice(table.startLine, 0, blankContainerLine(prefix));
+	}
+	return immediate.length > 0 ? lines.join("\n") : source;
+}
+
+// 把 widths 写入第 tableIndex 张表格的标记行：有则原位替换，无则插入到表格上方并留空行。
 // 表格不存在或列数与 widths 不一致（结构已变化）时返回 null，调用方放弃写入。
 export function upsertMarker(
 	source: string,
@@ -156,9 +183,13 @@ export function upsertMarker(
 	if (table.markerLine !== null) {
 		const { prefix } = splitContainerPrefix(lines[table.markerLine]);
 		lines[table.markerLine] = `${prefix}${marker}`;
+		if (table.startLine === table.markerLine + 1) {
+			const tablePrefix = splitContainerPrefix(lines[table.startLine]).prefix;
+			lines.splice(table.startLine, 0, blankContainerLine(tablePrefix));
+		}
 	} else {
 		const { prefix } = splitContainerPrefix(lines[table.startLine]);
-		lines.splice(table.startLine, 0, `${prefix}${marker}`);
+		lines.splice(table.startLine, 0, `${prefix}${marker}`, blankContainerLine(prefix));
 	}
 	return lines.join("\n");
 }

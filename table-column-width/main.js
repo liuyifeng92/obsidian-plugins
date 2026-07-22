@@ -81,6 +81,12 @@ function splitContainerPrefix(line) {
   const prefix = line.match(/^(\s*(?:>\s*)*)/)?.[1] ?? "";
   return { prefix, content: line.slice(prefix.length) };
 }
+function sameContainer(a, b) {
+  return a.replace(/\s/g, "") === b.replace(/\s/g, "");
+}
+function blankContainerLine(prefix) {
+  return prefix.includes(">") ? prefix.trimEnd() : "";
+}
 function parseTables(source) {
   const lines = source.split("\n");
   const tables = [];
@@ -90,10 +96,10 @@ function parseTables(source) {
     const trimmed = content.trim();
     const fenceMatch = trimmed.match(/^(`{3,}|~{3,})/);
     if (fenceMatch) {
-      const marker = fenceMatch[1];
+      const marker2 = fenceMatch[1];
       if (!fence) {
-        fence = { char: marker[0], length: marker.length };
-      } else if (marker[0] === fence.char && marker.length >= fence.length) {
+        fence = { char: marker2[0], length: marker2.length };
+      } else if (marker2[0] === fence.char && marker2.length >= fence.length) {
         fence = null;
       }
       continue;
@@ -105,18 +111,35 @@ function parseTables(source) {
     if (!headers || !delimiters || headers.length !== delimiters.length || !delimiters.every((cell) => /^:?-{3,}:?$/.test(cell))) {
       continue;
     }
-    const previous = i > 0 ? splitContainerPrefix(lines[i - 1]) : null;
-    const widths = previous?.prefix === prefix ? parseMarkerLine(previous.content) : null;
+    let markerLine = i - 1;
+    const previous = markerLine >= 0 ? splitContainerPrefix(lines[markerLine]) : null;
+    if (previous && previous.content.trim() === "" && sameContainer(previous.prefix, prefix)) {
+      markerLine--;
+    }
+    const marker = markerLine >= 0 ? splitContainerPrefix(lines[markerLine]) : null;
+    const widths = marker && sameContainer(marker.prefix, prefix) ? parseMarkerLine(marker.content) : null;
     tables.push({
       startLine: i,
       colCount: headers.length,
       headers,
-      markerLine: widths ? i - 1 : null,
+      markerLine: widths ? markerLine : null,
       widths
     });
     i++;
   }
   return tables;
+}
+function normalizeMarkerSpacing(source) {
+  const lines = source.split("\n");
+  const immediate = parseTables(source).filter(
+    (table) => table.markerLine !== null && table.startLine === table.markerLine + 1
+  );
+  for (let i = immediate.length - 1; i >= 0; i--) {
+    const table = immediate[i];
+    const { prefix } = splitContainerPrefix(lines[table.startLine]);
+    lines.splice(table.startLine, 0, blankContainerLine(prefix));
+  }
+  return immediate.length > 0 ? lines.join("\n") : source;
 }
 function upsertMarker(source, tableIndex, widths) {
   const table = parseTables(source)[tableIndex];
@@ -126,9 +149,13 @@ function upsertMarker(source, tableIndex, widths) {
   if (table.markerLine !== null) {
     const { prefix } = splitContainerPrefix(lines[table.markerLine]);
     lines[table.markerLine] = `${prefix}${marker}`;
+    if (table.startLine === table.markerLine + 1) {
+      const tablePrefix = splitContainerPrefix(lines[table.startLine]).prefix;
+      lines.splice(table.startLine, 0, blankContainerLine(tablePrefix));
+    }
   } else {
     const { prefix } = splitContainerPrefix(lines[table.startLine]);
-    lines.splice(table.startLine, 0, `${prefix}${marker}`);
+    lines.splice(table.startLine, 0, `${prefix}${marker}`, blankContainerLine(prefix));
   }
   return lines.join("\n");
 }
@@ -267,7 +294,10 @@ var TableColumnWidthPlugin = class extends import_obsidian.Plugin {
   }
   async refreshMarkers(file) {
     if (!file || file.extension !== "md") return;
-    this.markers.set(file.path, parseTables(await this.app.vault.read(file)));
+    const data = await this.app.vault.read(file);
+    const normalized = normalizeMarkerSpacing(data);
+    const next = normalized === data ? data : await this.app.vault.process(file, (current) => normalizeMarkerSpacing(current));
+    this.markers.set(file.path, parseTables(next));
   }
   // 表头比对的装配层：缓存中有旧表头时，编辑触发重算宽度并写回标记行。
   // 先读后比对、有变化才写，避免 process 无差别写文件造成 modify 循环；
