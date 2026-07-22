@@ -1,7 +1,7 @@
 {
 	"id": "table-column-width",
 	"name": "【FutureLAB】Table Column Width",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"minAppVersion": "1.0.0",
 	"description": "表格固定布局渲染，列宽按列拖动调整，宽度随笔记文件同步。",
 	"author": "刘一锋",

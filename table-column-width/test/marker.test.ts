@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+	minimalTextChange,
 	parseMarkerLine,
 	parseTables,
 	reconcileMarkers,
@@ -7,6 +8,16 @@ import {
 	serializeMarkerLine,
 	upsertMarker,
 } from "../src/marker";
+
+describe("minimalTextChange", () => {
+	it("插入标记行时只产生一段插入，不替换表格源码", () => {
+		const before = "前文\n| a | b |\n| --- | --- |";
+		const after = "前文\n<!-- colwidths: 100,200 -->\n| a | b |\n| --- | --- |";
+		const change = minimalTextChange(before, after);
+		expect(change.from).toBe(change.to);
+		expect(before.slice(0, change.from) + change.text + before.slice(change.to)).toBe(after);
+	});
+});
 
 describe("parseMarkerLine", () => {
 	it("解析合法标记行", () => {
@@ -77,6 +88,39 @@ describe("parseTables", () => {
 	it("跳过代码围栏中的 | 行", () => {
 		expect(parseTables(source).every((t) => t.colCount > 1)).toBe(true);
 	});
+
+	it("按表头和分隔行识别有效表格，支持无首尾竖线", () => {
+		const markdown = [
+			"a | b",
+			"--- | ---",
+			"1 | 2",
+			"",
+			"| 只是普通文本 |",
+		].join("\n");
+		const tables = parseTables(markdown);
+		expect(tables).toHaveLength(1);
+		expect(tables[0].headers).toEqual(["a", "b"]);
+	});
+
+	it("转义竖线不会被当作列分隔符", () => {
+		const markdown = "| [[Page\\|Alias]] | B |\n| --- | --- |";
+		const [table] = parseTables(markdown);
+		expect(table.colCount).toBe(2);
+		expect(table.headers).toEqual(["[[Page\\|Alias]]", "B"]);
+	});
+
+	it("识别 callout 中的原生 Markdown 表格及标记行", () => {
+		const markdown = [
+			"> [!note]",
+			"> <!-- colwidths: 100,200 -->",
+			"> | a | b |",
+			"> | --- | --- |",
+		].join("\n");
+		const [table] = parseTables(markdown);
+		expect(table.startLine).toBe(2);
+		expect(table.markerLine).toBe(1);
+		expect(table.widths).toEqual([100, 200]);
+	});
 });
 
 describe("upsertMarker", () => {
@@ -97,6 +141,13 @@ describe("upsertMarker", () => {
 		const result = upsertMarker(source, 0, [150, 80]);
 		expect(result).toBe(
 			["<!-- colwidths: 150,80 -->", "| a | b |", "|---|---|"].join("\n")
+		);
+	});
+
+	it("callout 表格的标记行保留引用前缀", () => {
+		const source = "> [!note]\n> | a | b |\n> | --- | --- |";
+		expect(upsertMarker(source, 0, [100, 200])).toBe(
+			"> [!note]\n> <!-- colwidths: 100,200 -->\n> | a | b |\n> | --- | --- |"
 		);
 	});
 
@@ -127,6 +178,12 @@ describe("reconcileWidths", () => {
 	it("重复表头按序列位置对齐", () => {
 		expect(reconcileWidths(["a", "a", "b"], ["a", "a", "a", "b"], [1, 2, 3])).toEqual([
 			1, 2, 120, 3,
+		]);
+	});
+
+	it("改名为已存在的表头时只重置改名列", () => {
+		expect(reconcileWidths(["A", "B", "C"], ["B", "B", "C"], [80, 160, 240])).toEqual([
+			120, 160, 240,
 		]);
 	});
 
@@ -163,6 +220,26 @@ describe("reconcileMarkers", () => {
 			"|---|---|",
 		].join("\n");
 		expect(reconcileMarkers(source, parseTables(source))).toBe(source);
+	});
+
+	it("callout 表头变化时保留标记行的引用前缀", () => {
+		const before = [
+			"> <!-- colwidths: 100,200 -->",
+			"> | a | b |",
+			"> | --- | --- |",
+		].join("\n");
+		const after = [
+			"> <!-- colwidths: 100,200 -->",
+			"> | a | x | b |",
+			"> | --- | --- | --- |",
+		].join("\n");
+		expect(reconcileMarkers(after, parseTables(before))).toBe(
+			[
+				"> <!-- colwidths: 100,120,200 -->",
+				"> | a | x | b |",
+				"> | --- | --- | --- |",
+			].join("\n")
+		);
 	});
 
 	it("无标记行的表格不生成标记行", () => {

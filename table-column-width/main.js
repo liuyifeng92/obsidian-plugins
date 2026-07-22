@@ -27,6 +27,17 @@ var import_view = require("@codemirror/view");
 var import_state = require("@codemirror/state");
 
 // src/marker.ts
+function minimalTextChange(before, after) {
+  let from = 0;
+  while (from < before.length && from < after.length && before[from] === after[from]) from++;
+  let beforeEnd = before.length;
+  let afterEnd = after.length;
+  while (beforeEnd > from && afterEnd > from && before[beforeEnd - 1] === after[afterEnd - 1]) {
+    beforeEnd--;
+    afterEnd--;
+  }
+  return { from, to: beforeEnd, text: after.slice(from, afterEnd) };
+}
 function serializeMarkerLine(widths) {
   return `<!-- colwidths: ${widths.join(",")} -->`;
 }
@@ -39,37 +50,71 @@ function parseMarkerLine(line) {
   if (widths.some((w) => !Number.isInteger(w) || w <= 0)) return null;
   return widths;
 }
-function parseHeaders(headerLine) {
-  const trimmed = headerLine.trim().replace(/^\|/, "").replace(/\|$/, "");
-  return trimmed.split("|").map((cell) => cell.trim());
+function isEscaped(line, index) {
+  let slashes = 0;
+  for (let i = index - 1; i >= 0 && line[i] === "\\"; i--) slashes++;
+  return slashes % 2 === 1;
+}
+function splitTableRow(line) {
+  let row = line.trim();
+  let hasSeparator = false;
+  for (let i = 0; i < row.length; i++) {
+    if (row[i] === "|" && !isEscaped(row, i)) hasSeparator = true;
+  }
+  if (!hasSeparator) return null;
+  if (row.startsWith("|")) row = row.slice(1);
+  if (row.endsWith("|") && !isEscaped(row, row.length - 1)) row = row.slice(0, -1);
+  const cells = [];
+  let cell = "";
+  for (let i = 0; i < row.length; i++) {
+    if (row[i] === "|" && !isEscaped(row, i)) {
+      cells.push(cell.trim());
+      cell = "";
+    } else {
+      cell += row[i];
+    }
+  }
+  cells.push(cell.trim());
+  return cells;
+}
+function splitContainerPrefix(line) {
+  const prefix = line.match(/^(\s*(?:>\s*)*)/)?.[1] ?? "";
+  return { prefix, content: line.slice(prefix.length) };
 }
 function parseTables(source) {
   const lines = source.split("\n");
   const tables = [];
-  let inFence = false;
-  let current = null;
+  let fence = null;
   for (let i = 0; i < lines.length; i++) {
-    const trimmed = lines[i].trim();
-    if (trimmed.startsWith("```")) {
-      inFence = !inFence;
-      current = null;
+    const { prefix, content } = splitContainerPrefix(lines[i]);
+    const trimmed = content.trim();
+    const fenceMatch = trimmed.match(/^(`{3,}|~{3,})/);
+    if (fenceMatch) {
+      const marker = fenceMatch[1];
+      if (!fence) {
+        fence = { char: marker[0], length: marker.length };
+      } else if (marker[0] === fence.char && marker.length >= fence.length) {
+        fence = null;
+      }
       continue;
     }
-    if (inFence || !trimmed.startsWith("|")) {
-      current = null;
+    if (fence || i + 1 >= lines.length) continue;
+    const headers = splitTableRow(trimmed);
+    const next = splitContainerPrefix(lines[i + 1]);
+    const delimiters = prefix === next.prefix ? splitTableRow(next.content) : null;
+    if (!headers || !delimiters || headers.length !== delimiters.length || !delimiters.every((cell) => /^:?-{3,}:?$/.test(cell))) {
       continue;
     }
-    if (current) continue;
-    const widths = i > 0 ? parseMarkerLine(lines[i - 1]) : null;
-    const headers = parseHeaders(trimmed);
-    current = {
+    const previous = i > 0 ? splitContainerPrefix(lines[i - 1]) : null;
+    const widths = previous?.prefix === prefix ? parseMarkerLine(previous.content) : null;
+    tables.push({
       startLine: i,
       colCount: headers.length,
       headers,
       markerLine: widths ? i - 1 : null,
       widths
-    };
-    tables.push(current);
+    });
+    i++;
   }
   return tables;
 }
@@ -79,9 +124,11 @@ function upsertMarker(source, tableIndex, widths) {
   const lines = source.split("\n");
   const marker = serializeMarkerLine(widths);
   if (table.markerLine !== null) {
-    lines[table.markerLine] = marker;
+    const { prefix } = splitContainerPrefix(lines[table.markerLine]);
+    lines[table.markerLine] = `${prefix}${marker}`;
   } else {
-    lines.splice(table.startLine, 0, marker);
+    const { prefix } = splitContainerPrefix(lines[table.startLine]);
+    lines.splice(table.startLine, 0, `${prefix}${marker}`);
   }
   return lines.join("\n");
 }
@@ -103,7 +150,7 @@ function lcsPairs(oldSeq, newSeq) {
       pairs.push([i, j]);
       i++;
       j++;
-    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+    } else if (dp[i + 1][j] > dp[i][j + 1]) {
       i++;
     } else {
       j++;
@@ -127,9 +174,10 @@ function reconcileMarkers(source, cached) {
     if (!prev?.widths || curr.markerLine === null) continue;
     const unchanged = prev.headers.length === curr.headers.length && prev.headers.every((h, i) => h === curr.headers[i]);
     if (unchanged) continue;
-    lines[curr.markerLine] = serializeMarkerLine(
+    const { prefix } = splitContainerPrefix(lines[curr.markerLine]);
+    lines[curr.markerLine] = `${prefix}${serializeMarkerLine(
       reconcileWidths(prev.headers, curr.headers, prev.widths)
-    );
+    )}`;
     changed = true;
   }
   return changed ? lines.join("\n") : source;
@@ -140,6 +188,7 @@ var FROZEN_CLASS = "tcw-frozen";
 var SCROLL_CLASS = "tcw-scroll";
 var HANDLES_CLASS = "tcw-handles";
 var HANDLE_CLASS = "tcw-handle";
+var COLGROUP_CLASS = "tcw-colgroup";
 var MIN_COL_WIDTH = 40;
 var MARKER_LINE_CLASS = "tcw-marker-line";
 var markerLineDeco = import_view.Decoration.line({ class: MARKER_LINE_CLASS });
@@ -149,7 +198,8 @@ function buildMarkerLineDecos(view) {
     let pos = from;
     while (pos <= to) {
       const line = view.state.doc.lineAt(pos);
-      if (parseMarkerLine(line.text) !== null) {
+      const markerText = line.text.replace(/^\s*(?:>\s*)*/, "");
+      if (parseMarkerLine(markerText) !== null) {
         builder.add(line.from, line.from, markerLineDeco);
       }
       pos = line.to + 1;
@@ -176,20 +226,22 @@ var TableColumnWidthPlugin = class extends import_obsidian.Plugin {
     this.observer = null;
     // 笔记路径 → 源码中解析出的表格及标记行，重渲染时据此恢复宽度
     this.markers = /* @__PURE__ */ new Map();
+    // 用户手动删除标记行后，本会话内保持该表格的原生 auto 布局
+    this.nativeTables = /* @__PURE__ */ new Map();
+    this.stopActiveDrag = null;
   }
   onload() {
     this.registerEditorExtension(hideMarkerLines);
     this.app.workspace.onLayoutReady(() => {
-      void this.refreshMarkers(this.app.workspace.getActiveFile()).then(() => {
+      this.restoreAllTables();
+      void this.refreshVisibleMarkers().then(() => {
         this.freezeAll();
         this.startObserver();
       });
     });
     this.registerEvent(
       this.app.workspace.on("active-leaf-change", () => {
-        void this.refreshMarkers(this.app.workspace.getActiveFile()).then(
-          () => this.freezeAll()
-        );
+        void this.refreshVisibleMarkers().then(() => this.freezeAll());
       })
     );
     this.registerEvent(
@@ -202,6 +254,16 @@ var TableColumnWidthPlugin = class extends import_obsidian.Plugin {
   }
   onunload() {
     this.observer?.disconnect();
+    this.stopActiveDrag?.();
+    this.restoreAllTables();
+  }
+  async refreshVisibleMarkers() {
+    const files = /* @__PURE__ */ new Map();
+    for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
+      const view = leaf.view;
+      if (view instanceof import_obsidian.MarkdownView && view.file) files.set(view.file.path, view.file);
+    }
+    await Promise.all(Array.from(files.values(), (file) => this.refreshMarkers(file)));
   }
   async refreshMarkers(file) {
     if (!file || file.extension !== "md") return;
@@ -214,15 +276,28 @@ var TableColumnWidthPlugin = class extends import_obsidian.Plugin {
     const cached = this.markers.get(file.path);
     if (!cached) return this.refreshMarkers(file);
     const data = await this.app.vault.read(file);
-    if (reconcileMarkers(data, cached) === data) {
-      this.markers.set(file.path, parseTables(data));
-      return;
+    const reconciled = reconcileMarkers(data, cached);
+    let next = data;
+    if (reconciled !== data) {
+      next = await this.app.vault.process(file, (current) => reconcileMarkers(current, cached));
     }
-    const next = await this.app.vault.process(
-      file,
-      (current) => reconcileMarkers(current, cached)
-    );
-    this.markers.set(file.path, parseTables(next));
+    const parsed = parseTables(next);
+    const native = this.nativeTables.get(file.path) ?? /* @__PURE__ */ new Set();
+    const removed = /* @__PURE__ */ new Set();
+    for (let i = 0; i < Math.max(cached.length, parsed.length); i++) {
+      const sameHeaders = cached[i]?.headers.length === parsed[i]?.headers.length && cached[i]?.headers.every((header, col) => header === parsed[i]?.headers[col]);
+      if (sameHeaders && cached[i]?.widths && !parsed[i]?.widths) {
+        native.add(i);
+        removed.add(i);
+      } else if (parsed[i]?.widths) {
+        native.delete(i);
+      }
+    }
+    if (native.size > 0) this.nativeTables.set(file.path, native);
+    else this.nativeTables.delete(file.path);
+    this.markers.set(file.path, parsed);
+    if (removed.size > 0) this.restoreTables(file.path, removed);
+    this.freezeAll();
   }
   // 用 MutationObserver 而不是 MarkdownPostProcessor：
   // 回调是微任务，在 DOM 插入之后、浏览器绘制之前执行，
@@ -249,20 +324,19 @@ var TableColumnWidthPlugin = class extends import_obsidian.Plugin {
   }
   freezeTable(table) {
     if (table.classList.contains(FROZEN_CLASS)) return;
-    if (!table.closest(".markdown-preview-view") && !table.closest(".cm-content")) return;
-    if (table.closest(".block-language-dataview, .block-language-dataviewjs, .dataview")) return;
+    if (!this.isNativeMarkdownTable(table)) return;
     if (table.closest(`.${SCROLL_CLASS}`)) return;
     const firstRow = table.rows[0];
     if (!firstRow) return;
     const colCount = firstRow.cells.length;
     if (colCount === 0) return;
-    const eligible = this.isMarkerEligible(table);
-    const view = eligible ? this.viewForTable(table) : null;
+    const view = this.viewForTable(table);
+    if (!view?.file) return;
+    const index = this.tableIndex(table);
+    if (index < 0 || this.nativeTables.get(view.file.path)?.has(index)) return;
     let widths = null;
-    if (view?.file) {
-      const entry = this.markers.get(view.file.path)?.[this.tableIndex(table)];
-      if (entry?.widths && entry.widths.length === colCount) widths = entry.widths;
-    }
+    const entry = this.markers.get(view.file.path)?.[index];
+    if (entry?.widths && entry.widths.length === colCount) widths = entry.widths;
     if (!widths) {
       widths = Array.from(firstRow.cells).map((cell) => cell.offsetWidth);
       if (widths.some((w) => w <= 0)) return;
@@ -273,12 +347,14 @@ var TableColumnWidthPlugin = class extends import_obsidian.Plugin {
   applyFixedLayout(table, widths) {
     const total = widths.reduce((sum, w) => sum + w, 0);
     const colgroup = document.createElement("colgroup");
+    colgroup.className = COLGROUP_CLASS;
     for (const w of widths) {
       const col = document.createElement("col");
       col.style.width = `${w}px`;
       colgroup.appendChild(col);
     }
     table.insertBefore(colgroup, table.firstChild);
+    table.dataset.tcwOriginalWidth = table.style.width;
     table.style.width = `${total}px`;
     table.classList.add(FROZEN_CLASS);
     const wrapper = document.createElement("div");
@@ -286,12 +362,43 @@ var TableColumnWidthPlugin = class extends import_obsidian.Plugin {
     table.parentElement?.insertBefore(wrapper, table);
     wrapper.appendChild(table);
   }
-  // 与 parseTables 的识别范围保持一致：
-  // 嵌入笔记和 callout 内的表格只做内存冻结，不参与标记行匹配
-  isMarkerEligible(table) {
-    if (table.closest(".block-language-dataview, .block-language-dataviewjs, .dataview")) return false;
-    if (table.closest(".markdown-embed, .callout, .cm-callout")) return false;
-    return true;
+  restoreTable(table) {
+    const wrapper = table.parentElement;
+    if (wrapper?.classList.contains(SCROLL_CLASS)) {
+      wrapper.querySelector(`.${HANDLES_CLASS}`)?.remove();
+      wrapper.parentElement?.insertBefore(table, wrapper);
+      wrapper.remove();
+    }
+    table.querySelector(":scope > colgroup")?.remove();
+    table.classList.remove(FROZEN_CLASS);
+    if (table.dataset.tcwOriginalWidth !== void 0) {
+      table.style.width = table.dataset.tcwOriginalWidth;
+      delete table.dataset.tcwOriginalWidth;
+    } else {
+      table.style.removeProperty("width");
+    }
+  }
+  restoreAllTables() {
+    document.querySelectorAll(`table.${FROZEN_CLASS}`).forEach((table) => {
+      if (table instanceof HTMLTableElement) this.restoreTable(table);
+    });
+  }
+  restoreTables(path, indices) {
+    for (const table of Array.from(document.querySelectorAll(`table.${FROZEN_CLASS}`))) {
+      if (!(table instanceof HTMLTableElement)) continue;
+      const view = this.viewForTable(table);
+      if (view?.file?.path !== path) continue;
+      if (indices.has(this.tableIndex(table))) this.restoreTable(table);
+    }
+  }
+  // 只接受 Obsidian 原生 Markdown 渲染容器，从源头排除 Canvas、嵌入和插件动态表格。
+  isNativeMarkdownTable(table) {
+    if (table.closest(".canvas, .canvas-node, .canvas-node-content, .markdown-embed")) return false;
+    if (table.closest('[class*="block-language-"], .dataview')) return false;
+    if (table.closest(".cm-content")) {
+      return table.closest(".cm-table-widget") !== null || table.closest(".cm-callout") !== null && table.closest(".el-table") !== null;
+    }
+    return table.closest(".markdown-preview-view") !== null && table.closest(".el-table") !== null;
   }
   // 表格在其视图中的序号（只数标记行匹配的表格），与 parseTables 的顺序一一对应
   tableIndex(table) {
@@ -300,12 +407,12 @@ var TableColumnWidthPlugin = class extends import_obsidian.Plugin {
       let index = 0;
       for (const candidate of Array.from(preview.querySelectorAll("table"))) {
         if (candidate === table) return index;
-        if (this.isMarkerEligible(candidate)) index++;
+        if (candidate instanceof HTMLTableElement && this.isNativeMarkdownTable(candidate)) index++;
       }
       return -1;
     }
     const content = table.closest(".cm-content");
-    if (content && table.closest(".cm-table-widget")) {
+    if (content && table.closest(".cm-table-widget, .cm-callout")) {
       return this.livePreviewIndex(table, content);
     }
     return -1;
@@ -317,7 +424,7 @@ var TableColumnWidthPlugin = class extends import_obsidian.Plugin {
     let index = 0;
     let prevRaw = false;
     for (const child of Array.from(content.children)) {
-      const isRawTableLine = child.classList.contains("HyperMD-table-line") && !child.classList.contains("HyperMD-codeblock") && !child.classList.contains("HyperMD-quote");
+      const isRawTableLine = child.classList.contains("HyperMD-table-line") && !child.classList.contains("HyperMD-codeblock");
       if (isRawTableLine) {
         if (!prevRaw) index++;
         prevRaw = true;
@@ -326,7 +433,7 @@ var TableColumnWidthPlugin = class extends import_obsidian.Plugin {
       prevRaw = false;
       for (const candidate of Array.from(child.querySelectorAll("table"))) {
         if (!(candidate instanceof HTMLTableElement)) continue;
-        if (!this.isMarkerEligible(candidate)) continue;
+        if (!this.isNativeMarkdownTable(candidate)) continue;
         if (candidate === table) return index;
         index++;
       }
@@ -377,6 +484,7 @@ var TableColumnWidthPlugin = class extends import_obsidian.Plugin {
     const startX = e.clientX;
     const startWidth = widths[colIndex];
     const cols = table.querySelectorAll("col");
+    this.stopActiveDrag?.();
     const onMove = (ev) => {
       const next = Math.max(MIN_COL_WIDTH, Math.round(startWidth + ev.clientX - startX));
       if (next === widths[colIndex]) return;
@@ -385,11 +493,18 @@ var TableColumnWidthPlugin = class extends import_obsidian.Plugin {
       table.style.width = `${widths.reduce((sum, w) => sum + w, 0)}px`;
       this.layoutHandles(handles, widths);
     };
-    const onUp = () => {
+    const cleanup = () => {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
-      void this.persistWidths(view, table, [...widths]);
+      if (this.stopActiveDrag === cleanup) this.stopActiveDrag = null;
     };
+    const onUp = () => {
+      cleanup();
+      if (widths[colIndex] !== startWidth) {
+        void this.persistWidths(view, table, [...widths]);
+      }
+    };
+    this.stopActiveDrag = cleanup;
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
   }
@@ -399,10 +514,23 @@ var TableColumnWidthPlugin = class extends import_obsidian.Plugin {
     if (!file) return;
     const index = this.tableIndex(table);
     if (index < 0) return;
-    const next = await this.app.vault.process(
-      file,
-      (data) => upsertMarker(data, index, widths) ?? data
+    const data = view.editor.getValue();
+    const next = upsertMarker(data, index, widths);
+    if (!next || next === data) return;
+    const change = minimalTextChange(data, next);
+    view.editor.transaction(
+      {
+        changes: [
+          {
+            from: view.editor.offsetToPos(change.from),
+            to: view.editor.offsetToPos(change.to),
+            text: change.text
+          }
+        ]
+      },
+      "table-column-width"
     );
     this.markers.set(file.path, parseTables(next));
+    this.nativeTables.get(file.path)?.delete(index);
   }
 };

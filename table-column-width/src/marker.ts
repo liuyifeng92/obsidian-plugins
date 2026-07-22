@@ -14,6 +14,30 @@ export interface SourceTable {
 	widths: number[] | null;
 }
 
+export interface TextChange {
+	from: number;
+	to: number;
+	text: string;
+}
+
+// 计算单段最小文本变更，供编辑器事务保留选区与小部件状态。
+export function minimalTextChange(before: string, after: string): TextChange {
+	let from = 0;
+	while (from < before.length && from < after.length && before[from] === after[from]) from++;
+
+	let beforeEnd = before.length;
+	let afterEnd = after.length;
+	while (
+		beforeEnd > from &&
+		afterEnd > from &&
+		before[beforeEnd - 1] === after[afterEnd - 1]
+	) {
+		beforeEnd--;
+		afterEnd--;
+	}
+	return { from, to: beforeEnd, text: after.slice(from, afterEnd) };
+}
+
 // 规范格式：<!-- colwidths: 120,96,180 -->
 export function serializeMarkerLine(widths: number[]): string {
 	return `<!-- colwidths: ${widths.join(",")} -->`;
@@ -30,44 +54,90 @@ export function parseMarkerLine(line: string): number[] | null {
 	return widths;
 }
 
-// 解析表头行：去掉首尾竖线后按 | 切分并 trim
+function isEscaped(line: string, index: number): boolean {
+	let slashes = 0;
+	for (let i = index - 1; i >= 0 && line[i] === "\\"; i--) slashes++;
+	return slashes % 2 === 1;
+}
+
+function splitTableRow(line: string): string[] | null {
+	let row = line.trim();
+	let hasSeparator = false;
+	for (let i = 0; i < row.length; i++) {
+		if (row[i] === "|" && !isEscaped(row, i)) hasSeparator = true;
+	}
+	if (!hasSeparator) return null;
+	if (row.startsWith("|")) row = row.slice(1);
+	if (row.endsWith("|") && !isEscaped(row, row.length - 1)) row = row.slice(0, -1);
+
+	const cells: string[] = [];
+	let cell = "";
+	for (let i = 0; i < row.length; i++) {
+		if (row[i] === "|" && !isEscaped(row, i)) {
+			cells.push(cell.trim());
+			cell = "";
+		} else {
+			cell += row[i];
+		}
+	}
+	cells.push(cell.trim());
+	return cells;
+}
+
+function splitContainerPrefix(line: string): { prefix: string; content: string } {
+	const prefix = line.match(/^(\s*(?:>\s*)*)/)?.[1] ?? "";
+	return { prefix, content: line.slice(prefix.length) };
+}
+
+// 解析表头行：首尾竖线可选，转义竖线保留在单元格内
 export function parseHeaders(headerLine: string): string[] {
-	const trimmed = headerLine.trim().replace(/^\|/, "").replace(/\|$/, "");
-	return trimmed.split("|").map((cell) => cell.trim());
+	return splitTableRow(headerLine) ?? [];
 }
 
 // 扫描笔记源码，按顺序列出所有 markdown 表格。
-// 连续的 | 开头行视为同一张表；代码围栏内的 | 行跳过；
-// callout 内的表格（> | ...）不识别，与 DOM 层跳过 .callout 内表格保持一致。
+// 只有「表头 + 同列数分隔行」才计为表格；代码围栏内跳过。
 export function parseTables(source: string): SourceTable[] {
 	const lines = source.split("\n");
 	const tables: SourceTable[] = [];
-	let inFence = false;
-	let current: SourceTable | null = null;
+	let fence: { char: string; length: number } | null = null;
 
 	for (let i = 0; i < lines.length; i++) {
-		const trimmed = lines[i].trim();
-		if (trimmed.startsWith("```")) {
-			inFence = !inFence;
-			current = null;
+		const { prefix, content } = splitContainerPrefix(lines[i]);
+		const trimmed = content.trim();
+		const fenceMatch = trimmed.match(/^(`{3,}|~{3,})/);
+		if (fenceMatch) {
+			const marker = fenceMatch[1];
+			if (!fence) {
+				fence = { char: marker[0], length: marker.length };
+			} else if (marker[0] === fence.char && marker.length >= fence.length) {
+				fence = null;
+			}
 			continue;
 		}
-		if (inFence || !trimmed.startsWith("|")) {
-			current = null;
-			continue;
-		}
-		if (current) continue; // 表格的后续行
+		if (fence || i + 1 >= lines.length) continue;
 
-		const widths = i > 0 ? parseMarkerLine(lines[i - 1]) : null;
-		const headers = parseHeaders(trimmed);
-		current = {
+		const headers = splitTableRow(trimmed);
+		const next = splitContainerPrefix(lines[i + 1]);
+		const delimiters = prefix === next.prefix ? splitTableRow(next.content) : null;
+		if (
+			!headers ||
+			!delimiters ||
+			headers.length !== delimiters.length ||
+			!delimiters.every((cell) => /^:?-{3,}:?$/.test(cell))
+		) {
+			continue;
+		}
+
+		const previous = i > 0 ? splitContainerPrefix(lines[i - 1]) : null;
+		const widths = previous?.prefix === prefix ? parseMarkerLine(previous.content) : null;
+		tables.push({
 			startLine: i,
 			colCount: headers.length,
 			headers,
 			markerLine: widths ? i - 1 : null,
 			widths,
-		};
-		tables.push(current);
+		});
+		i++; // 分隔行不可能另起一张表
 	}
 	return tables;
 }
@@ -84,9 +154,11 @@ export function upsertMarker(
 	const lines = source.split("\n");
 	const marker = serializeMarkerLine(widths);
 	if (table.markerLine !== null) {
-		lines[table.markerLine] = marker;
+		const { prefix } = splitContainerPrefix(lines[table.markerLine]);
+		lines[table.markerLine] = `${prefix}${marker}`;
 	} else {
-		lines.splice(table.startLine, 0, marker);
+		const { prefix } = splitContainerPrefix(lines[table.startLine]);
+		lines.splice(table.startLine, 0, `${prefix}${marker}`);
 	}
 	return lines.join("\n");
 }
@@ -116,7 +188,7 @@ function lcsPairs(oldSeq: string[], newSeq: string[]): Array<[number, number]> {
 			pairs.push([i, j]);
 			i++;
 			j++;
-		} else if (dp[i + 1][j] >= dp[i][j + 1]) {
+		} else if (dp[i + 1][j] > dp[i][j + 1]) {
 			i++;
 		} else {
 			j++;
@@ -153,9 +225,10 @@ export function reconcileMarkers(source: string, cached: SourceTable[]): string 
 			prev.headers.length === curr.headers.length &&
 			prev.headers.every((h, i) => h === curr.headers[i]);
 		if (unchanged) continue;
-		lines[curr.markerLine] = serializeMarkerLine(
+		const { prefix } = splitContainerPrefix(lines[curr.markerLine]);
+		lines[curr.markerLine] = `${prefix}${serializeMarkerLine(
 			reconcileWidths(prev.headers, curr.headers, prev.widths)
-		);
+		)}`;
 		changed = true;
 	}
 	return changed ? lines.join("\n") : source;
