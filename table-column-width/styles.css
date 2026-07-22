@@ -38,3 +38,9 @@
 	background: var(--interactive-accent);
 	opacity: 0.5;
 }
+
+/* Live Preview 中标记行是可见文本：隐藏它（光标行除外，仍可定位删除）。
+   源码模式不隐藏——那里标记行是用户直接编辑的数据 */
+.is-live-preview .cm-line.tcw-marker-line:not(.cm-active) {
+	display: none;
+}

@@ -6,7 +6,7 @@ const prod = process.argv[2] === "production";
 await esbuild.build({
 	entryPoints: ["main.ts"],
 	bundle: true,
-	external: ["obsidian"],
+	external: ["obsidian", "@codemirror/state", "@codemirror/view"],
 	format: "cjs",
 	target: "es2020",
 	logLevel: "info",

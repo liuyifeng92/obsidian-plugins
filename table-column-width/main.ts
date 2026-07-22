@@ -1,11 +1,60 @@
 import { MarkdownView, Platform, Plugin, TFile } from "obsidian";
-import { parseTables, reconcileMarkers, upsertMarker, SourceTable } from "./src/marker";
+import {
+	Decoration,
+	DecorationSet,
+	EditorView,
+	ViewPlugin,
+	ViewUpdate,
+} from "@codemirror/view";
+import { RangeSetBuilder } from "@codemirror/state";
+import {
+	parseMarkerLine,
+	parseTables,
+	reconcileMarkers,
+	upsertMarker,
+	SourceTable,
+} from "./src/marker";
 
 const FROZEN_CLASS = "tcw-frozen";
 const SCROLL_CLASS = "tcw-scroll";
 const HANDLES_CLASS = "tcw-handles";
 const HANDLE_CLASS = "tcw-handle";
 const MIN_COL_WIDTH = 40;
+const MARKER_LINE_CLASS = "tcw-marker-line";
+
+// Live Preview 下标记行是可见文本（行内 span 带 cm-comment 类），CSS 无法按
+// 文本内容选择，改用 ViewPlugin 给匹配标记行的整行加类，再由 CSS 隐藏
+const markerLineDeco = Decoration.line({ class: MARKER_LINE_CLASS });
+
+function buildMarkerLineDecos(view: EditorView): DecorationSet {
+	const builder = new RangeSetBuilder<Decoration>();
+	for (const { from, to } of view.visibleRanges) {
+		let pos = from;
+		while (pos <= to) {
+			const line = view.state.doc.lineAt(pos);
+			if (parseMarkerLine(line.text) !== null) {
+				builder.add(line.from, line.from, markerLineDeco);
+			}
+			pos = line.to + 1;
+		}
+	}
+	return builder.finish();
+}
+
+const hideMarkerLines = ViewPlugin.fromClass(
+	class {
+		decorations: DecorationSet;
+		constructor(view: EditorView) {
+			this.decorations = buildMarkerLineDecos(view);
+		}
+		update(update: ViewUpdate): void {
+			if (update.docChanged || update.viewportChanged) {
+				this.decorations = buildMarkerLineDecos(update.view);
+			}
+		}
+	},
+	{ decorations: (v) => v.decorations }
+);
 
 export default class TableColumnWidthPlugin extends Plugin {
 	private observer: MutationObserver | null = null;
@@ -13,6 +62,8 @@ export default class TableColumnWidthPlugin extends Plugin {
 	private markers = new Map<string, SourceTable[]>();
 
 	onload(): void {
+		// Live Preview 中隐藏标记行（光标行除外，仍可编辑删除）
+		this.registerEditorExtension(hideMarkerLines);
 		this.app.workspace.onLayoutReady(() => {
 			// 先加载标记行缓存再冻结，保证首屏就按标记行恢复
 			void this.refreshMarkers(this.app.workspace.getActiveFile()).then(() => {
@@ -87,15 +138,18 @@ export default class TableColumnWidthPlugin extends Plugin {
 	}
 
 	private freezeAll(): void {
-		document.querySelectorAll(".markdown-preview-view table").forEach((table) => {
-			if (table instanceof HTMLTableElement) this.freezeTable(table);
-		});
+		document
+			.querySelectorAll(".markdown-preview-view table, .cm-content table")
+			.forEach((table) => {
+				if (table instanceof HTMLTableElement) this.freezeTable(table);
+			});
 	}
 
 	private freezeTable(table: HTMLTableElement): void {
 		if (table.classList.contains(FROZEN_CLASS)) return;
-		// 只处理阅读模式渲染的表格（排除编辑模式 CM6 小部件等）
-		if (!table.closest(".markdown-preview-view")) return;
+		// 阅读模式表格与 Live Preview 表格（.cm-table-widget 内）都处理；
+		// 纯源码模式没有渲染的表格，自然不涉及
+		if (!table.closest(".markdown-preview-view") && !table.closest(".cm-content")) return;
 		// Dataview 等插件渲染的动态表格不受影响
 		if (table.closest(".block-language-dataview, .block-language-dataviewjs, .dataview")) return;
 		if (table.closest(`.${SCROLL_CLASS}`)) return;
@@ -151,18 +205,52 @@ export default class TableColumnWidthPlugin extends Plugin {
 	// 嵌入笔记和 callout 内的表格只做内存冻结，不参与标记行匹配
 	private isMarkerEligible(table: HTMLTableElement): boolean {
 		if (table.closest(".block-language-dataview, .block-language-dataviewjs, .dataview")) return false;
-		if (table.closest(".markdown-embed, .callout")) return false;
+		// .callout / .cm-callout 分别覆盖阅读模式与 Live Preview 的 callout 渲染
+		if (table.closest(".markdown-embed, .callout, .cm-callout")) return false;
 		return true;
 	}
 
-	// 表格在其预览中的序号（只数标记行匹配的表格），与 parseTables 的顺序一一对应
+	// 表格在其视图中的序号（只数标记行匹配的表格），与 parseTables 的顺序一一对应
 	private tableIndex(table: HTMLTableElement): number {
 		const preview = table.closest(".markdown-preview-view");
-		if (!preview) return -1;
+		if (preview) {
+			let index = 0;
+			for (const candidate of Array.from(preview.querySelectorAll("table"))) {
+				if (candidate === table) return index;
+				if (this.isMarkerEligible(candidate)) index++;
+			}
+			return -1;
+		}
+		const content = table.closest(".cm-content");
+		if (content && table.closest(".cm-table-widget")) {
+			return this.livePreviewIndex(table, content);
+		}
+		return -1;
+	}
+
+	// Live Preview 的序号：按文档序遍历 .cm-content 的子元素，渲染的表格
+	// 小部件与「光标所在表格展开成的原始行组」各占一个序号。漏数原始行组
+	// 会使光标在某表格内时其后所有表格的序号错位
+	private livePreviewIndex(table: HTMLTableElement, content: Element): number {
 		let index = 0;
-		for (const candidate of Array.from(preview.querySelectorAll("table"))) {
-			if (candidate === table) return index;
-			if (this.isMarkerEligible(candidate)) index++;
+		let prevRaw = false;
+		for (const child of Array.from(content.children)) {
+			const isRawTableLine =
+				child.classList.contains("HyperMD-table-line") &&
+				!child.classList.contains("HyperMD-codeblock") &&
+				!child.classList.contains("HyperMD-quote");
+			if (isRawTableLine) {
+				if (!prevRaw) index++; // 连续原始表格行 = 一张表
+				prevRaw = true;
+				continue;
+			}
+			prevRaw = false;
+			for (const candidate of Array.from(child.querySelectorAll("table"))) {
+				if (!(candidate instanceof HTMLTableElement)) continue;
+				if (!this.isMarkerEligible(candidate)) continue;
+				if (candidate === table) return index;
+				index++;
+			}
 		}
 		return -1;
 	}
@@ -216,6 +304,8 @@ export default class TableColumnWidthPlugin extends Plugin {
 		handles: HTMLElement[]
 	): void {
 		e.preventDefault();
+		// Live Preview 中阻止 CM6 接管 mousedown（移动光标/选中小部件）
+		e.stopPropagation();
 		const startX = e.clientX;
 		const startWidth = widths[colIndex];
 		const cols = table.querySelectorAll("col");

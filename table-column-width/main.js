@@ -23,6 +23,8 @@ __export(main_exports, {
 });
 module.exports = __toCommonJS(main_exports);
 var import_obsidian = require("obsidian");
+var import_view = require("@codemirror/view");
+var import_state = require("@codemirror/state");
 
 // src/marker.ts
 function serializeMarkerLine(widths) {
@@ -139,6 +141,35 @@ var SCROLL_CLASS = "tcw-scroll";
 var HANDLES_CLASS = "tcw-handles";
 var HANDLE_CLASS = "tcw-handle";
 var MIN_COL_WIDTH = 40;
+var MARKER_LINE_CLASS = "tcw-marker-line";
+var markerLineDeco = import_view.Decoration.line({ class: MARKER_LINE_CLASS });
+function buildMarkerLineDecos(view) {
+  const builder = new import_state.RangeSetBuilder();
+  for (const { from, to } of view.visibleRanges) {
+    let pos = from;
+    while (pos <= to) {
+      const line = view.state.doc.lineAt(pos);
+      if (parseMarkerLine(line.text) !== null) {
+        builder.add(line.from, line.from, markerLineDeco);
+      }
+      pos = line.to + 1;
+    }
+  }
+  return builder.finish();
+}
+var hideMarkerLines = import_view.ViewPlugin.fromClass(
+  class {
+    constructor(view) {
+      this.decorations = buildMarkerLineDecos(view);
+    }
+    update(update) {
+      if (update.docChanged || update.viewportChanged) {
+        this.decorations = buildMarkerLineDecos(update.view);
+      }
+    }
+  },
+  { decorations: (v) => v.decorations }
+);
 var TableColumnWidthPlugin = class extends import_obsidian.Plugin {
   constructor() {
     super(...arguments);
@@ -147,6 +178,7 @@ var TableColumnWidthPlugin = class extends import_obsidian.Plugin {
     this.markers = /* @__PURE__ */ new Map();
   }
   onload() {
+    this.registerEditorExtension(hideMarkerLines);
     this.app.workspace.onLayoutReady(() => {
       void this.refreshMarkers(this.app.workspace.getActiveFile()).then(() => {
         this.freezeAll();
@@ -211,13 +243,13 @@ var TableColumnWidthPlugin = class extends import_obsidian.Plugin {
     this.register(() => this.observer?.disconnect());
   }
   freezeAll() {
-    document.querySelectorAll(".markdown-preview-view table").forEach((table) => {
+    document.querySelectorAll(".markdown-preview-view table, .cm-content table").forEach((table) => {
       if (table instanceof HTMLTableElement) this.freezeTable(table);
     });
   }
   freezeTable(table) {
     if (table.classList.contains(FROZEN_CLASS)) return;
-    if (!table.closest(".markdown-preview-view")) return;
+    if (!table.closest(".markdown-preview-view") && !table.closest(".cm-content")) return;
     if (table.closest(".block-language-dataview, .block-language-dataviewjs, .dataview")) return;
     if (table.closest(`.${SCROLL_CLASS}`)) return;
     const firstRow = table.rows[0];
@@ -258,17 +290,46 @@ var TableColumnWidthPlugin = class extends import_obsidian.Plugin {
   // 嵌入笔记和 callout 内的表格只做内存冻结，不参与标记行匹配
   isMarkerEligible(table) {
     if (table.closest(".block-language-dataview, .block-language-dataviewjs, .dataview")) return false;
-    if (table.closest(".markdown-embed, .callout")) return false;
+    if (table.closest(".markdown-embed, .callout, .cm-callout")) return false;
     return true;
   }
-  // 表格在其预览中的序号（只数标记行匹配的表格），与 parseTables 的顺序一一对应
+  // 表格在其视图中的序号（只数标记行匹配的表格），与 parseTables 的顺序一一对应
   tableIndex(table) {
     const preview = table.closest(".markdown-preview-view");
-    if (!preview) return -1;
+    if (preview) {
+      let index = 0;
+      for (const candidate of Array.from(preview.querySelectorAll("table"))) {
+        if (candidate === table) return index;
+        if (this.isMarkerEligible(candidate)) index++;
+      }
+      return -1;
+    }
+    const content = table.closest(".cm-content");
+    if (content && table.closest(".cm-table-widget")) {
+      return this.livePreviewIndex(table, content);
+    }
+    return -1;
+  }
+  // Live Preview 的序号：按文档序遍历 .cm-content 的子元素，渲染的表格
+  // 小部件与「光标所在表格展开成的原始行组」各占一个序号。漏数原始行组
+  // 会使光标在某表格内时其后所有表格的序号错位
+  livePreviewIndex(table, content) {
     let index = 0;
-    for (const candidate of Array.from(preview.querySelectorAll("table"))) {
-      if (candidate === table) return index;
-      if (this.isMarkerEligible(candidate)) index++;
+    let prevRaw = false;
+    for (const child of Array.from(content.children)) {
+      const isRawTableLine = child.classList.contains("HyperMD-table-line") && !child.classList.contains("HyperMD-codeblock") && !child.classList.contains("HyperMD-quote");
+      if (isRawTableLine) {
+        if (!prevRaw) index++;
+        prevRaw = true;
+        continue;
+      }
+      prevRaw = false;
+      for (const candidate of Array.from(child.querySelectorAll("table"))) {
+        if (!(candidate instanceof HTMLTableElement)) continue;
+        if (!this.isMarkerEligible(candidate)) continue;
+        if (candidate === table) return index;
+        index++;
+      }
     }
     return -1;
   }
@@ -312,6 +373,7 @@ var TableColumnWidthPlugin = class extends import_obsidian.Plugin {
   // 拖动过程中只改 DOM/CSS，不触发文件写入；松开鼠标才一次写入标记行
   startDrag(e, view, table, widths, colIndex, handles) {
     e.preventDefault();
+    e.stopPropagation();
     const startX = e.clientX;
     const startWidth = widths[colIndex];
     const cols = table.querySelectorAll("col");
