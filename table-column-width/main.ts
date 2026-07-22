@@ -25,6 +25,7 @@ import {
 	upsertMarker,
 	SourceTable,
 } from "./src/marker";
+import { calculateBleedLayout } from "./src/layout";
 import { compareVersions } from "./src/update";
 
 const FROZEN_CLASS = "tcw-frozen";
@@ -114,6 +115,7 @@ export default class TableColumnWidthPlugin extends Plugin {
 			this.restoreAllTables();
 			void this.refreshVisibleMarkers().then(() => {
 				this.freezeAll();
+				this.layoutAllScrollAreas();
 				this.startObserver();
 			});
 		});
@@ -121,8 +123,14 @@ export default class TableColumnWidthPlugin extends Plugin {
 		// 切换回该标签页时补一次扫描
 		this.registerEvent(
 			this.app.workspace.on("active-leaf-change", () => {
-				void this.refreshVisibleMarkers().then(() => this.freezeAll());
+				void this.refreshVisibleMarkers().then(() => {
+					this.freezeAll();
+					this.layoutAllScrollAreas();
+				});
 			})
+		);
+		this.registerEvent(
+			this.app.workspace.on("resize", () => this.layoutAllScrollAreas())
 		);
 		// 用户编辑笔记后：先做表头比对（结构变化时自动维护标记行），
 		// 再刷新缓存；Obsidian 随后重渲染，MutationObserver 冻结新表格时
@@ -257,13 +265,17 @@ export default class TableColumnWidthPlugin extends Plugin {
 			widths = Array.from(firstRow.cells).map((cell) => cell.offsetWidth);
 			if (widths.some((w) => w <= 0)) return;
 		}
-		this.applyFixedLayout(table, widths);
+		this.applyFixedLayout(view, table, widths);
 
 		// 拖动手柄仅桌面端提供；移动端只应用已存宽度
 		if (view && !Platform.isMobile) this.attachHandles(view, table, widths);
 	}
 
-	private applyFixedLayout(table: HTMLTableElement, widths: number[]): void {
+	private applyFixedLayout(
+		view: MarkdownView,
+		table: HTMLTableElement,
+		widths: number[]
+	): void {
 		const total = widths.reduce((sum, w) => sum + w, 0);
 
 		const colgroup = document.createElement("colgroup");
@@ -285,6 +297,34 @@ export default class TableColumnWidthPlugin extends Plugin {
 		wrapper.className = SCROLL_CLASS;
 		table.parentElement?.insertBefore(wrapper, table);
 		wrapper.appendChild(table);
+		this.layoutScrollArea(view, wrapper, table);
+		wrapper.scrollLeft = 0;
+	}
+
+	private layoutScrollArea(
+		view: MarkdownView,
+		wrapper: HTMLElement,
+		table: HTMLTableElement
+	): void {
+		const content = wrapper.parentElement;
+		const pane = table.closest(".markdown-source-view, .markdown-preview-view");
+		if (!content || !pane || !view.containerEl.contains(pane)) return;
+		const paneRect = pane.getBoundingClientRect();
+		const contentRect = content.getBoundingClientRect();
+		const layout = calculateBleedLayout(paneRect.left, paneRect.right, contentRect.left);
+		wrapper.style.marginLeft = `${layout.marginLeft}px`;
+		wrapper.style.paddingLeft = `${layout.paddingLeft}px`;
+		wrapper.style.width = `${layout.width}px`;
+	}
+
+	private layoutAllScrollAreas(): void {
+		document.querySelectorAll(`.${SCROLL_CLASS}`).forEach((element) => {
+			if (!(element instanceof HTMLElement)) return;
+			const table = element.querySelector(":scope > table");
+			if (!(table instanceof HTMLTableElement)) return;
+			const view = this.viewForTable(table);
+			if (view) this.layoutScrollArea(view, element, table);
+		});
 	}
 
 	private restoreTable(table: HTMLTableElement): void {

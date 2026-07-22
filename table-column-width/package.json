@@ -1,6 +1,6 @@
 {
 	"name": "table-column-width",
-	"version": "1.0.5",
+	"version": "1.0.6",
 	"description": "Obsidian plugin that renders markdown tables with fixed layout and per-column draggable widths, persisted inside the note file.",
 	"main": "main.js",
 	"scripts": {

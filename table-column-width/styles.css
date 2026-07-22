@@ -14,6 +14,7 @@
 .tcw-scroll {
 	overflow-x: auto;
 	overflow-y: hidden;
+	box-sizing: border-box;
 	/* 拖动手柄的定位基准 */
 	position: relative;
 }

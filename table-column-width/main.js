@@ -210,6 +210,16 @@ function reconcileMarkers(source, cached) {
   return changed ? lines.join("\n") : source;
 }
 
+// src/layout.ts
+function calculateBleedLayout(paneLeft, paneRight, contentLeft) {
+  const leftInset = Math.max(0, contentLeft - paneLeft);
+  return {
+    marginLeft: leftInset === 0 ? 0 : -leftInset,
+    paddingLeft: leftInset,
+    width: Math.max(0, paneRight - paneLeft)
+  };
+}
+
 // src/update.ts
 function compareVersions(v1, v2) {
   const parseVersion = (version) => version.replace(/^v/, "").split(/[+-]/, 1)[0].split(".").map((part) => {
@@ -295,13 +305,20 @@ var TableColumnWidthPlugin = class extends import_obsidian.Plugin {
       this.restoreAllTables();
       void this.refreshVisibleMarkers().then(() => {
         this.freezeAll();
+        this.layoutAllScrollAreas();
         this.startObserver();
       });
     });
     this.registerEvent(
       this.app.workspace.on("active-leaf-change", () => {
-        void this.refreshVisibleMarkers().then(() => this.freezeAll());
+        void this.refreshVisibleMarkers().then(() => {
+          this.freezeAll();
+          this.layoutAllScrollAreas();
+        });
       })
+    );
+    this.registerEvent(
+      this.app.workspace.on("resize", () => this.layoutAllScrollAreas())
     );
     this.registerEvent(
       this.app.vault.on("modify", (file) => {
@@ -412,10 +429,10 @@ var TableColumnWidthPlugin = class extends import_obsidian.Plugin {
       widths = Array.from(firstRow.cells).map((cell) => cell.offsetWidth);
       if (widths.some((w) => w <= 0)) return;
     }
-    this.applyFixedLayout(table, widths);
+    this.applyFixedLayout(view, table, widths);
     if (view && !import_obsidian.Platform.isMobile) this.attachHandles(view, table, widths);
   }
-  applyFixedLayout(table, widths) {
+  applyFixedLayout(view, table, widths) {
     const total = widths.reduce((sum, w) => sum + w, 0);
     const colgroup = document.createElement("colgroup");
     colgroup.className = COLGROUP_CLASS;
@@ -432,6 +449,28 @@ var TableColumnWidthPlugin = class extends import_obsidian.Plugin {
     wrapper.className = SCROLL_CLASS;
     table.parentElement?.insertBefore(wrapper, table);
     wrapper.appendChild(table);
+    this.layoutScrollArea(view, wrapper, table);
+    wrapper.scrollLeft = 0;
+  }
+  layoutScrollArea(view, wrapper, table) {
+    const content = wrapper.parentElement;
+    const pane = table.closest(".markdown-source-view, .markdown-preview-view");
+    if (!content || !pane || !view.containerEl.contains(pane)) return;
+    const paneRect = pane.getBoundingClientRect();
+    const contentRect = content.getBoundingClientRect();
+    const layout = calculateBleedLayout(paneRect.left, paneRect.right, contentRect.left);
+    wrapper.style.marginLeft = `${layout.marginLeft}px`;
+    wrapper.style.paddingLeft = `${layout.paddingLeft}px`;
+    wrapper.style.width = `${layout.width}px`;
+  }
+  layoutAllScrollAreas() {
+    document.querySelectorAll(`.${SCROLL_CLASS}`).forEach((element) => {
+      if (!(element instanceof HTMLElement)) return;
+      const table = element.querySelector(":scope > table");
+      if (!(table instanceof HTMLTableElement)) return;
+      const view = this.viewForTable(table);
+      if (view) this.layoutScrollArea(view, element, table);
+    });
   }
   restoreTable(table) {
     const wrapper = table.parentElement;
