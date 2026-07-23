@@ -1,0 +1,54 @@
+/* 固定布局：列宽由 colgroup 决定，不随内容长短跳变 */
+.tcw-frozen {
+	table-layout: fixed;
+	max-width: none;
+}
+
+/* 单元格长文字折行显示，不撑宽列 */
+.tcw-frozen th,
+.tcw-frozen td {
+	min-width: 0 !important;
+	overflow-wrap: anywhere;
+}
+
+/* 表格总宽超出笔记区域时容器内横向滚动 */
+.tcw-scroll {
+	overflow-x: auto;
+	overflow-y: hidden;
+	box-sizing: border-box;
+	/* 拖动手柄的定位基准 */
+	position: relative;
+}
+
+/* 手柄覆盖层：不拦截鼠标，只有手柄本身可点 */
+.tcw-handles {
+	position: absolute;
+	pointer-events: none;
+}
+
+/* 列右边缘的拖拽热区，悬停时显示提示条 */
+.tcw-handle {
+	position: absolute;
+	top: 0;
+	width: 8px;
+	height: 100%;
+	transform: translateX(-50%);
+	cursor: col-resize;
+	pointer-events: auto;
+}
+
+.tcw-handle:hover {
+	background: var(--interactive-accent);
+	opacity: 0.5;
+}
+
+/* Live Preview 中标记行是可见文本：隐藏它（光标行除外，仍可定位删除）。
+   源码模式不隐藏——那里标记行是用户直接编辑的数据 */
+.is-live-preview .cm-line.tcw-marker-line:not(.cm-active) {
+	display: none;
+}
+
+/* 标记后的空行只用于维持 Markdown 块边界，Live Preview 中不占高度 */
+.is-live-preview .cm-line.tcw-marker-spacer-line {
+	display: none;
+}

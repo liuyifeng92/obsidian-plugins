@@ -99,6 +99,7 @@ obsidian插件/
 ├── auto-frontmatter/        # 文档属性管理插件
 ├── file-auto-upload-plugin/ # 文件自动上传插件
 ├── homepage-dashboard/      # 首页仪表盘插件
+├── table-column-width/      # 表格列宽拖拽插件
 ├── deploy.sh                # 一键构建部署脚本
 ├── AGENTS.md
 ├── README.md
@@ -110,12 +111,14 @@ obsidian插件/
 - `./deploy.sh auto` — 只部署 auto-frontmatter
 - `./deploy.sh upload` — 只部署 file-auto-upload-plugin
 - `./deploy.sh dashboard` — 只部署 homepage-dashboard
+- `./deploy.sh table` — 只部署 table-column-width
 - `./deploy.sh` — 部署全部
 
 **Vault 插件目录映射：**
 - `auto-frontmatter` → `FutureLAB/.obsidian/plugins/auto-frontmatter/`
 - `file-auto-upload-plugin` → `FutureLAB/.obsidian/plugins/obsidian-image-auto-upload-plugin/`
 - `homepage-dashboard` → `FutureLAB/.obsidian/plugins/homepage-dashboard/`
+- `table-column-width` → `FutureLAB/.obsidian/plugins/table-column-width/`
 
 **部署只复制：** `main.js`、`manifest.json`、`styles.css`。绝不复制 `data.json`。
 
@@ -134,3 +137,17 @@ https://raw.githubusercontent.com/liuyifeng92/obsidian-plugins/main/{插件目�
 5. 递增三级版本号并自动打 tag：`npm version patch`（会自动更新 `package.json`、`manifest.json`、`versions.json`，并生成 commit + tag，如 `v1.0.1`）
 6. 推送前询问用户是否需要升级二级或一级版本号
 7. 确认后 `git push && git push --tags`，远端版本号即为 OTA 可检测的最新版本
+
+## Agent skills
+
+### Issue tracker
+
+Issues 跟踪在本仓库的 GitHub Issues（`liuyifeng92/obsidian-plugins`），使用 `gh` CLI 操作。详见 `docs/agents/issue-tracker.md`。
+
+### Triage labels
+
+使用五个默认 triage 标签：`needs-triage`、`needs-info`、`ready-for-agent`、`ready-for-human`、`wontfix`。详见 `docs/agents/triage-labels.md`。
+
+### Domain docs
+
+单上下文（single-context）布局：根目录 `CONTEXT.md` + `docs/adr/`。详见 `docs/agents/domain.md`。
