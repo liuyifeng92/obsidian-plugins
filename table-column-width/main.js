@@ -220,6 +220,17 @@ function calculateBleedLayout(paneLeft, paneRight, contentLeft) {
   };
 }
 
+// src/scroll.ts
+function preserveScrollTop(target, update) {
+  const scrollTop = target?.scrollTop;
+  update();
+  if (!target || scrollTop === void 0) return;
+  target.scrollTop = scrollTop;
+  requestAnimationFrame(() => {
+    if (target.isConnected) target.scrollTop = scrollTop;
+  });
+}
+
 // src/update.ts
 function compareVersions(v1, v2) {
   const parseVersion = (version) => version.replace(/^v/, "").split(/[+-]/, 1)[0].split(".").map((part) => {
@@ -443,6 +454,9 @@ var TableColumnWidthPlugin = class extends import_obsidian.Plugin {
     table.insertBefore(colgroup, table.firstChild);
     table.dataset.tcwOriginalWidth = table.style.width;
     table.style.width = `${total}px`;
+    if (table.parentElement?.classList.contains("table-wrapper")) {
+      table.parentElement.style.width = `${total}px`;
+    }
     table.classList.add(FROZEN_CLASS);
     const livePreviewHost = table.closest(".cm-table-widget");
     if (livePreviewHost instanceof HTMLElement) {
@@ -503,6 +517,9 @@ var TableColumnWidthPlugin = class extends import_obsidian.Plugin {
       scrollArea.style.removeProperty("margin-left");
       scrollArea.style.removeProperty("padding-left");
       scrollArea.style.removeProperty("width");
+      if (table.parentElement?.classList.contains("table-wrapper")) {
+        table.parentElement.style.removeProperty("width");
+      }
     }
     table.querySelector(":scope > colgroup")?.remove();
     table.classList.remove(FROZEN_CLASS);
@@ -602,14 +619,16 @@ var TableColumnWidthPlugin = class extends import_obsidian.Plugin {
       overlay.appendChild(handle);
       handles.push(handle);
     }
-    this.layoutHandles(handles, widths);
+    this.layoutHandles(table, handles);
     wrapper.appendChild(overlay);
   }
-  layoutHandles(handles, widths) {
-    let right = 0;
+  layoutHandles(table, handles) {
+    const cells = table.rows[0]?.cells;
+    if (!cells) return;
+    const tableLeft = table.getBoundingClientRect().left;
     for (let i = 0; i < handles.length; i++) {
-      right += widths[i];
-      handles[i].style.left = `${right}px`;
+      const cell = cells[i];
+      if (cell) handles[i].style.left = `${cell.getBoundingClientRect().right - tableLeft}px`;
     }
   }
   // 拖动过程中只改 DOM/CSS，不触发文件写入；松开鼠标才一次写入标记行
@@ -625,8 +644,12 @@ var TableColumnWidthPlugin = class extends import_obsidian.Plugin {
       if (next === widths[colIndex]) return;
       widths[colIndex] = next;
       cols[colIndex].style.width = `${next}px`;
-      table.style.width = `${widths.reduce((sum, w) => sum + w, 0)}px`;
-      this.layoutHandles(handles, widths);
+      const total = widths.reduce((sum, w) => sum + w, 0);
+      table.style.width = `${total}px`;
+      if (table.parentElement?.classList.contains("table-wrapper")) {
+        table.parentElement.style.width = `${total}px`;
+      }
+      this.layoutHandles(table, handles);
     };
     const cleanup = () => {
       window.removeEventListener("mousemove", onMove);
@@ -653,17 +676,22 @@ var TableColumnWidthPlugin = class extends import_obsidian.Plugin {
     const next = upsertMarker(data, index, widths);
     if (!next || next === data) return;
     const change = minimalTextChange(data, next);
-    view.editor.transaction(
-      {
-        changes: [
-          {
-            from: view.editor.offsetToPos(change.from),
-            to: view.editor.offsetToPos(change.to),
-            text: change.text
-          }
-        ]
-      },
-      "table-column-width"
+    const sourceScroller = table.closest(".markdown-source-view")?.querySelector(".cm-scroller");
+    const scrollTarget = sourceScroller instanceof HTMLElement ? sourceScroller : table.closest(".markdown-preview-view");
+    preserveScrollTop(
+      scrollTarget,
+      () => view.editor.transaction(
+        {
+          changes: [
+            {
+              from: view.editor.offsetToPos(change.from),
+              to: view.editor.offsetToPos(change.to),
+              text: change.text
+            }
+          ]
+        },
+        "table-column-width"
+      )
     );
     this.markers.set(file.path, parseTables(next));
     this.nativeTables.get(file.path)?.delete(index);

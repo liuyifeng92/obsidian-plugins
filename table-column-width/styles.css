@@ -7,7 +7,8 @@
 /* 单元格长文字折行显示，不撑宽列 */
 .tcw-frozen th,
 .tcw-frozen td {
-	overflow-wrap: break-word;
+	min-width: 0 !important;
+	overflow-wrap: anywhere;
 }
 
 /* 表格总宽超出笔记区域时容器内横向滚动 */

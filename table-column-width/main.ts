@@ -26,6 +26,7 @@ import {
 	SourceTable,
 } from "./src/marker";
 import { calculateBleedLayout } from "./src/layout";
+import { preserveScrollTop } from "./src/scroll";
 import { compareVersions } from "./src/update";
 
 const FROZEN_CLASS = "tcw-frozen";
@@ -289,6 +290,9 @@ export default class TableColumnWidthPlugin extends Plugin {
 		// 显式设置总宽，窄表格才能保持实际宽度左对齐不拉伸
 		table.dataset.tcwOriginalWidth = table.style.width;
 		table.style.width = `${total}px`;
+		if (table.parentElement?.classList.contains("table-wrapper")) {
+			table.parentElement.style.width = `${total}px`;
+		}
 		table.classList.add(FROZEN_CLASS);
 
 		// Live Preview 自带可滚动的表格宿主，直接扩展它才不会被
@@ -367,6 +371,9 @@ export default class TableColumnWidthPlugin extends Plugin {
 			scrollArea.style.removeProperty("margin-left");
 			scrollArea.style.removeProperty("padding-left");
 			scrollArea.style.removeProperty("width");
+			if (table.parentElement?.classList.contains("table-wrapper")) {
+				table.parentElement.style.removeProperty("width");
+			}
 		}
 		table.querySelector(":scope > colgroup")?.remove();
 		table.classList.remove(FROZEN_CLASS);
@@ -477,15 +484,17 @@ export default class TableColumnWidthPlugin extends Plugin {
 			overlay.appendChild(handle);
 			handles.push(handle);
 		}
-		this.layoutHandles(handles, widths);
+		this.layoutHandles(table, handles);
 		wrapper.appendChild(overlay);
 	}
 
-	private layoutHandles(handles: HTMLElement[], widths: number[]): void {
-		let right = 0;
+	private layoutHandles(table: HTMLTableElement, handles: HTMLElement[]): void {
+		const cells = table.rows[0]?.cells;
+		if (!cells) return;
+		const tableLeft = table.getBoundingClientRect().left;
 		for (let i = 0; i < handles.length; i++) {
-			right += widths[i];
-			handles[i].style.left = `${right}px`;
+			const cell = cells[i];
+			if (cell) handles[i].style.left = `${cell.getBoundingClientRect().right - tableLeft}px`;
 		}
 	}
 
@@ -511,8 +520,12 @@ export default class TableColumnWidthPlugin extends Plugin {
 			if (next === widths[colIndex]) return;
 			widths[colIndex] = next;
 			(cols[colIndex] as HTMLElement).style.width = `${next}px`;
-			table.style.width = `${widths.reduce((sum, w) => sum + w, 0)}px`;
-			this.layoutHandles(handles, widths);
+			const total = widths.reduce((sum, w) => sum + w, 0);
+			table.style.width = `${total}px`;
+			if (table.parentElement?.classList.contains("table-wrapper")) {
+				table.parentElement.style.width = `${total}px`;
+			}
+			this.layoutHandles(table, handles);
 		};
 		const cleanup = () => {
 			window.removeEventListener("mousemove", onMove);
@@ -544,17 +557,26 @@ export default class TableColumnWidthPlugin extends Plugin {
 		const next = upsertMarker(data, index, widths);
 		if (!next || next === data) return;
 		const change = minimalTextChange(data, next);
-		view.editor.transaction(
-			{
-				changes: [
-					{
-						from: view.editor.offsetToPos(change.from),
-						to: view.editor.offsetToPos(change.to),
-						text: change.text,
-					},
-				],
-			},
-			"table-column-width"
+		const sourceScroller = table
+			.closest(".markdown-source-view")
+			?.querySelector(".cm-scroller");
+		const scrollTarget =
+			sourceScroller instanceof HTMLElement
+				? sourceScroller
+				: table.closest<HTMLElement>(".markdown-preview-view");
+		preserveScrollTop(scrollTarget, () =>
+			view.editor.transaction(
+				{
+					changes: [
+						{
+							from: view.editor.offsetToPos(change.from),
+							to: view.editor.offsetToPos(change.to),
+							text: change.text,
+						},
+					],
+				},
+				"table-column-width"
+			)
 		);
 		// 立即同步内存缓存，避免重渲染早于 modify 事件的刷新而读到旧标记
 		this.markers.set(file.path, parseTables(next));
