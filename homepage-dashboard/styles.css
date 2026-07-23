@@ -193,6 +193,108 @@
 }
 
 /* ---------------------------------------------------------
+   1.5 Notion-style banner
+   --------------------------------------------------------- */
+.home-dashboard-banner {
+	position: relative;
+	width: 100%;
+	max-width: 1400px;
+	height: clamp(220px, 28vw, 280px);
+	margin: 0 auto 16px;
+	padding: 0 28px;
+	box-sizing: border-box;
+	overflow: hidden;
+	background: var(--kd-page-bg);
+}
+
+.theme-dark .home-dashboard-banner {
+	background: var(--background-primary);
+}
+
+.home-dashboard-banner-image {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	opacity: 0;
+	transition: opacity 0.35s ease;
+	z-index: 0;
+	-webkit-mask-image: linear-gradient(
+		to bottom,
+		black 0%,
+		black 35%,
+		rgba(0, 0, 0, 0.5) 55%,
+		transparent 100%
+	);
+	mask-image: linear-gradient(
+		to bottom,
+		black 0%,
+		black 35%,
+		rgba(0, 0, 0, 0.5) 55%,
+		transparent 100%
+	);
+}
+
+.home-dashboard-banner-image.is-loaded {
+	opacity: 1;
+}
+
+.home-dashboard-banner-image.is-error {
+	display: none;
+}
+
+/* Bottom frosted blur band — dissolves the image into the page background */
+.home-dashboard-banner::before {
+	content: "";
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	height: 45%;
+	z-index: 1;
+	pointer-events: none;
+	backdrop-filter: blur(6px);
+	-webkit-mask-image: linear-gradient(
+		to bottom,
+		transparent 0%,
+		black 40%,
+		black 100%
+	);
+	mask-image: linear-gradient(
+		to bottom,
+		transparent 0%,
+		black 40%,
+		black 100%
+	);
+}
+
+/* Soft color glow over the transition area — makes the fade feel warmer */
+.home-dashboard-banner::after {
+	content: "";
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	height: 45%;
+	z-index: 2;
+	pointer-events: none;
+	background: linear-gradient(
+		to bottom,
+		transparent 0%,
+		rgba(215, 195, 175, 0.05) 100%
+	);
+}
+
+.theme-dark .home-dashboard-banner::after {
+	background: linear-gradient(
+		to bottom,
+		transparent 0%,
+		rgba(255, 210, 180, 0.03) 100%
+	);
+}
+
+/* ---------------------------------------------------------
    2. Header / intro
    --------------------------------------------------------- */
 .home-dashboard-header {

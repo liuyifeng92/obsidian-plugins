@@ -1,5 +1,6 @@
 import { App, Modal, Notice, PluginSettingTab, Setting, TFile } from "obsidian";
 import { DashboardCombination, HomeDashboardPluginLike, HomeDashboardSettings } from "../types";
+import { HomeDashboardView } from "../view/HomeDashboardView";
 
 const SETTING_TABS = ["通用", "字段配置", "数据组合", "版本更新"] as const;
 type SettingTabId = (typeof SETTING_TABS)[number];
@@ -14,6 +15,7 @@ export const DEFAULT_SETTINGS: HomeDashboardSettings = {
 	heatmapColor: "#28B80F",
 	fieldDistributionColor: "#B01111",
 	autoOpenOnStartup: true,
+	showBannerImage: false,
 	excludedProjects: [],
 	excludedTypes: ["git日报"],
 };
@@ -70,6 +72,21 @@ export class HomeDashboardSettingTab extends PluginSettingTab {
 	}
 
 	private renderGeneralSettings(contentEl: HTMLElement): void {
+		new Setting(contentEl)
+			.setName("显示主页封面图")
+			.setDesc("在主页顶部显示每日随机封面 banner（默认关闭）。")
+			.addToggle((toggle) =>
+				toggle.setValue(this.plugin.settings.showBannerImage).onChange(async (value) => {
+					this.plugin.settings.showBannerImage = value;
+					await this.plugin.saveSettings();
+
+					const activeView = this.app.workspace.getActiveViewOfType(HomeDashboardView);
+					if (activeView) {
+						activeView.updateBannerVisibility();
+					}
+				})
+			);
+
 		new Setting(contentEl)
 			.setName("自动打开 Dashboard")
 			.setDesc("每次启动 Obsidian 或每天首次切回时自动进入 Dashboard。")

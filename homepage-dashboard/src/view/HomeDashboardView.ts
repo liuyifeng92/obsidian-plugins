@@ -12,6 +12,7 @@ export class HomeDashboardView extends ItemView {
 	searchKeyword: string = "";
 	currentLayout: DashboardLayout;
 	private cssChangeTimer: number | null = null;
+	private banner: HTMLElement | null = null;
 
 	constructor(leaf: WorkspaceLeaf, plugin: HomeDashboardPluginLike) {
 		super(leaf);
@@ -39,6 +40,9 @@ export class HomeDashboardView extends ItemView {
 	}
 
 	async onOpen(): Promise<void> {
+		if (this.plugin.settings.showBannerImage) {
+			this.renderBanner();
+		}
 		this.container = this.contentEl.createDiv("home-dashboard-container");
 		await this.render();
 
@@ -62,6 +66,7 @@ export class HomeDashboardView extends ItemView {
 		}
 		this.contentEl.empty();
 		this.container = null;
+		this.banner = null;
 		this.clearOrphanedTooltips();
 	}
 
@@ -134,6 +139,40 @@ export class HomeDashboardView extends ItemView {
 
 		const refreshButton = actions.createEl("button", { text: "刷新" });
 		refreshButton.addEventListener("click", () => this.render());
+	}
+
+	private renderBanner(): void {
+		const now = new Date();
+		const seed = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+		const bannerUrl = `https://picsum.photos/seed/${seed}/1600/400`;
+
+		const banner = this.contentEl.createDiv("home-dashboard-banner");
+		this.contentEl.prepend(banner);
+		this.banner = banner;
+
+		const img = banner.createEl("img", {
+			cls: "home-dashboard-banner-image",
+			attr: { src: bannerUrl, alt: "每日封面" },
+		});
+
+		img.addEventListener("load", () => {
+			img.classList.add("is-loaded");
+		});
+
+		img.addEventListener("error", () => {
+			img.classList.add("is-error");
+		});
+	}
+
+	updateBannerVisibility(): void {
+		if (this.plugin.settings.showBannerImage) {
+			if (!this.banner) {
+				this.renderBanner();
+			}
+		} else if (this.banner) {
+			this.banner.remove();
+			this.banner = null;
+		}
 	}
 
 	private renderResult(result: AggregatedResult): void {
