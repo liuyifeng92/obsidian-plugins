@@ -211,6 +211,9 @@ function reconcileMarkers(source, cached) {
 }
 
 // src/layout.ts
+function setFixedWidth(element, width) {
+  element.style.setProperty("width", `${width}px`, "important");
+}
 function calculateBleedLayout(paneLeft, paneRight, contentLeft) {
   const leftInset = Math.max(0, contentLeft - paneLeft);
   return {
@@ -453,9 +456,10 @@ var TableColumnWidthPlugin = class extends import_obsidian.Plugin {
     }
     table.insertBefore(colgroup, table.firstChild);
     table.dataset.tcwOriginalWidth = table.style.width;
-    table.style.width = `${total}px`;
+    table.dataset.tcwOriginalWidthPriority = table.style.getPropertyPriority("width");
+    setFixedWidth(table, total);
     if (table.parentElement?.classList.contains("table-wrapper")) {
-      table.parentElement.style.width = `${total}px`;
+      setFixedWidth(table.parentElement, total);
     }
     table.classList.add(FROZEN_CLASS);
     const livePreviewHost = table.closest(".cm-table-widget");
@@ -524,8 +528,13 @@ var TableColumnWidthPlugin = class extends import_obsidian.Plugin {
     table.querySelector(":scope > colgroup")?.remove();
     table.classList.remove(FROZEN_CLASS);
     if (table.dataset.tcwOriginalWidth !== void 0) {
-      table.style.width = table.dataset.tcwOriginalWidth;
+      table.style.setProperty(
+        "width",
+        table.dataset.tcwOriginalWidth,
+        table.dataset.tcwOriginalWidthPriority ?? ""
+      );
       delete table.dataset.tcwOriginalWidth;
+      delete table.dataset.tcwOriginalWidthPriority;
     } else {
       table.style.removeProperty("width");
     }
@@ -645,9 +654,9 @@ var TableColumnWidthPlugin = class extends import_obsidian.Plugin {
       widths[colIndex] = next;
       cols[colIndex].style.width = `${next}px`;
       const total = widths.reduce((sum, w) => sum + w, 0);
-      table.style.width = `${total}px`;
+      setFixedWidth(table, total);
       if (table.parentElement?.classList.contains("table-wrapper")) {
-        table.parentElement.style.width = `${total}px`;
+        setFixedWidth(table.parentElement, total);
       }
       this.layoutHandles(table, handles);
     };

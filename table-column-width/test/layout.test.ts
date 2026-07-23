@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { calculateBleedLayout } from "../src/layout";
+import { describe, expect, it, vi } from "vitest";
+import { calculateBleedLayout, setFixedWidth } from "../src/layout";
 
 describe("calculateBleedLayout", () => {
 	it("容器覆盖当前 Markdown 分栏，表格起点保持正文对齐", () => {
@@ -16,5 +16,16 @@ describe("calculateBleedLayout", () => {
 			paddingLeft: 0,
 			width: 700,
 		});
+	});
+});
+
+describe("setFixedWidth", () => {
+	it("覆盖主题强制的全宽表格规则", () => {
+		const setProperty = vi.fn();
+		const element = { style: { setProperty } } as unknown as HTMLElement;
+
+		setFixedWidth(element, 500);
+
+		expect(setProperty).toHaveBeenCalledWith("width", "500px", "important");
 	});
 });

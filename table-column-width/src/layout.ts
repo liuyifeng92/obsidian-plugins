@@ -4,6 +4,10 @@ export interface BleedLayout {
 	width: number;
 }
 
+export function setFixedWidth(element: HTMLElement, width: number): void {
+	element.style.setProperty("width", `${width}px`, "important");
+}
+
 export function calculateBleedLayout(
 	paneLeft: number,
 	paneRight: number,
